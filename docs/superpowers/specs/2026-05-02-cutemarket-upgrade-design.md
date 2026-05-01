@@ -44,7 +44,7 @@ struct MarketMeta has store, copy, drop {
     market_id: u64,
     market_address: address,       // resource account 地址
     creator: address,
-    category: u8,                  // 分类（体育/加密/政治/其他）
+    category: u8,                  // 分类枚举：0=体育, 1=加密货币, 2=政治, 3=娱乐, 4=科技, 5=其他
     created_at: u64,
 }
 
@@ -87,7 +87,7 @@ enum ResolutionType {
 |------|------|
 | `create_market` | 创建市场（名称、描述、选项、结束时间、结算方式、初始流动性） |
 | `buy_shares` | 购买份额（下注） |
-| `sell_shares` | 出售份额（平仓） |
+| `sell_shares` | 出售份额（平仓），参数 `shares` 为份额数量（非金额） |
 | `add_liquidity` | 添加流动性 |
 | `settle_market` | 结算市场（预言机触发或管理员） |
 | `claim_winnings` | 领取奖金 |
@@ -117,8 +117,8 @@ enum ResolutionType {
 | 单量占比 | 滑点 |
 |----------|------|
 | < 总池 1% | 无额外滑点 |
-| 1%-5% | 线性增加 |
-| > 5% | 高滑点保护，防止价格操纵 |
+| 1%-5% | 线性增加（每增加 1% 占比，额外滑点 +0.5%） |
+| > 5% | 拒绝交易，防止价格操纵 |
 
 ### 买入流程
 
