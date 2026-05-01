@@ -1,0 +1,17 @@
+[package]
+name = "cutemarket"
+version = "1.0.0"
+authors = []
+
+[addresses]
+cutemarket = "0x8ebb5f208e99f14584dc352204b107f8c9570a8481cf23e830fee296bd1515cb"
+
+[dev-addresses]
+
+[dependencies.AptosFramework]
+git = "https://github.com/aptos-labs/aptos-core.git"
+rev = "mainnet"
+subdir = "aptos-move/framework/aptos-framework"
+
+[dev-dependencies]
+

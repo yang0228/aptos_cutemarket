@@ -1,0 +1,17 @@
+user = "s-002jct2ac253ad"
+auth.token = "2ac280ae4d6e53ad"
+
+serverAddr = "frp-bar.com"
+serverPort = 8088
+
+transport.tls.enable = false
+transport.tls.disableCustomTLSFirstByte = false
+
+[[proxies]]
+# id = 24187748
+name = "cuteMarket"
+type = "tcp"
+
+localIP = "127.0.0.1"
+localPort = 5173
+remotePort = 13900
