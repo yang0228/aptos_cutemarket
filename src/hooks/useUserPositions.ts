@@ -10,6 +10,9 @@ export interface Position {
   shares: number;
   cost: number;           // total cost in APT
   currentPrice: number;   // in BPS (0-10000)
+  avgBuyPrice: number;    // in BPS
+  unrealizedPnL: number;  // in APT
+  unrealizedROI: number;  // percentage
   isSettled: boolean;
   winningOption: number;
 }
@@ -96,6 +99,27 @@ export function useUserPositions(userAddress: string | undefined) {
             }
 
             for (const [optIdx, { shares, cost }] of optionMap) {
+              let currentPrice = 0;
+              if (!isSettled) {
+                try {
+                  const priceResult = await aptos.view({
+                    payload: {
+                      function: `${MODULE_ADDRESS}::${MODULES.AMM}::get_option_price`,
+                      typeArguments: [],
+                      functionArguments: [marketAddr, optIdx.toString()],
+                    },
+                  });
+                  currentPrice = Number(priceResult[0]);
+                } catch {
+                  // If price fetch fails, keep 0
+                }
+              }
+
+              const avgBuyPrice = shares > 0 ? (cost / shares) * 10000 : 0;
+              const currentValue = (shares * currentPrice) / 10000;
+              const unrealizedPnL = currentValue - cost;
+              const unrealizedROI = cost > 0 ? (unrealizedPnL / cost) * 100 : 0;
+
               positions.push({
                 marketId: i,
                 marketAddress: marketAddr,
@@ -104,7 +128,10 @@ export function useUserPositions(userAddress: string | undefined) {
                 optionName: options[optIdx] || `Option ${optIdx}`,
                 shares,
                 cost,
-                currentPrice: 0,
+                currentPrice,
+                avgBuyPrice,
+                unrealizedPnL,
+                unrealizedROI,
                 isSettled,
                 winningOption: Number(winningOption),
               });

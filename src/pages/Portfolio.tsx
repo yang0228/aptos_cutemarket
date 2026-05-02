@@ -73,7 +73,7 @@ export function Portfolio() {
                   </div>
                 )}
               </div>
-              <div className="grid grid-cols-3 gap-4 mt-3">
+              <div className="grid grid-cols-5 gap-4 mt-3">
                 <div>
                   <p className="text-xs text-gray-500">选项</p>
                   <p className="font-medium text-gray-700">{pos.optionName}</p>
@@ -85,6 +85,25 @@ export function Portfolio() {
                 <div>
                   <p className="text-xs text-gray-500">份额</p>
                   <p className="font-medium text-gray-700">{pos.shares.toFixed(2)}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500">当前价格</p>
+                  <p className="font-medium text-gray-700">{pos.isSettled ? '-' : (pos.currentPrice / 100).toFixed(2) + '%'}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500">盈亏</p>
+                  {pos.isSettled ? (
+                    <p className="font-medium text-gray-500">-</p>
+                  ) : (
+                    <>
+                      <p className={`font-medium ${pos.unrealizedPnL >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                        {pos.unrealizedPnL >= 0 ? '+' : ''}{pos.unrealizedPnL.toFixed(4)} APT
+                      </p>
+                      <p className={`text-xs ${pos.unrealizedROI >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                        {pos.unrealizedROI >= 0 ? '+' : ''}{pos.unrealizedROI.toFixed(1)}%
+                      </p>
+                    </>
+                  )}
                 </div>
               </div>
             </div>
