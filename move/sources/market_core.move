@@ -405,4 +405,10 @@ module cutemarket::market_core {
         let state = borrow_global<MarketState>(market_addr);
         vector::length(&state.options)
     }
+
+    // Test-only: expose market address for tests
+    #[test_only]
+    public fun get_market_address_for_test(market_id: u64): address acquires MarketList {
+        get_market_address(market_id)
+    }
 }
