@@ -1,49 +1,49 @@
 import { useState, useEffect } from 'react';
-import { aptos, MODULE_ADDRESS, MODULE_NAME, octasToApt } from '../config/aptos';
+import { aptos, MODULE_ADDRESS, MODULES, octasToApt } from '../config/aptos';
 
 export interface ProjectData {
   id: number;
+  marketAddress: string;
   endTimestamp: number;
   isSettled: boolean;
   winningOption: number;
-  optionPools: number[]; // 单位：APT
-  totalPool: number;      // 单位：APT
+  optionPools: number[]; // in APT
+  totalPool: number;     // in APT
 }
 
-export function useProjectData(projectId: number) {
+export function useProjectData(marketId: number, marketAddress?: string) {
   const [data, setData] = useState<ProjectData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const fetchData = async () => {
+    if (!marketAddress) {
+      setLoading(false);
+      return;
+    }
+
     try {
       setLoading(true);
       setError(null);
 
-      // 调用合约的 view 函数
       const result = await aptos.view({
         payload: {
-          function: `${MODULE_ADDRESS}::${MODULE_NAME}::get_project_info`,
+          function: `${MODULE_ADDRESS}::${MODULES.MARKET_CORE}::get_market_state`,
           typeArguments: [],
-          functionArguments: [projectId.toString()],
+          functionArguments: [marketAddress],
         },
       });
 
-      // 解析返回数据
-      const [id, endTimestamp, isSettled, winningOption, optionPools] = result as [
-        string,
-        string,
-        boolean,
-        string,
-        string[]
+      const [id, , , , optionPools, , endTimestamp, isSettled, winningOption] = result as [
+        string, string, string, string[], string[], string, string, boolean, string
       ];
 
-      // 转换为 APT
-      const poolsInApt = optionPools.map((pool) => octasToApt(Number(pool)));
+      const poolsInApt = (optionPools as string[]).map((pool) => octasToApt(Number(pool)));
       const total = poolsInApt.reduce((sum, pool) => sum + pool, 0);
 
       setData({
         id: Number(id),
+        marketAddress,
         endTimestamp: Number(endTimestamp),
         isSettled,
         winningOption: Number(winningOption),
@@ -51,19 +51,11 @@ export function useProjectData(projectId: number) {
         totalPool: total,
       });
     } catch (err: any) {
-      // 如果合约未初始化，返回默认值
       if (err.message?.includes('RESOURCE_NOT_FOUND') || err.message?.includes('not published')) {
-        setData({
-          id: projectId,
-          endTimestamp: 0,
-          isSettled: false,
-          winningOption: 0,
-          optionPools: [],
-          totalPool: 0,
-        });
+        setData(null);
       } else {
-        console.error('获取项目数据失败:', err);
-        setError(err.message || '获取数据失败');
+        console.error('Failed to fetch market data:', err);
+        setError(err.message || 'Failed to fetch data');
       }
     } finally {
       setLoading(false);
@@ -72,13 +64,11 @@ export function useProjectData(projectId: number) {
 
   useEffect(() => {
     fetchData();
-
-    // 每 10 秒刷新一次数据
-    const interval = setInterval(fetchData, 10000);
-    return () => clearInterval(interval);
-  }, [projectId]);
+    if (marketAddress) {
+      const interval = setInterval(fetchData, 5000);
+      return () => clearInterval(interval);
+    }
+  }, [marketId, marketAddress]);
 
   return { data, loading, error, refetch: fetchData };
 }
-
-
