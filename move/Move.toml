@@ -4,7 +4,7 @@ version = "1.0.0"
 authors = []
 
 [addresses]
-cutemarket = "0x8ebb5f208e99f14584dc352204b107f8c9570a8481cf23e830fee296bd1515cb"
+cutemarket = "0xf28e42120ec3007579f530ac426b2d553f501681431a433f3584bf6d37c94f16"
 
 [dev-addresses]
 
