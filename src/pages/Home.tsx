@@ -44,8 +44,8 @@ export function Home() {
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="mb-8">
-        <h2 className="text-4xl font-bold text-white mb-2">预测市场</h2>
-        <p className="text-white/80 text-lg">选择一个市场，预测未来，赢取奖励</p>
+        <h2 className="text-3xl md:text-4xl font-bold text-white mb-2">预测市场</h2>
+        <p className="text-white/80 text-base md:text-lg">选择一个市场，预测未来，赢取奖励</p>
       </div>
 
       {/* Portfolio summary */}

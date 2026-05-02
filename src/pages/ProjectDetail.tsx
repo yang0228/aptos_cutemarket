@@ -134,9 +134,9 @@ export function ProjectDetail() {
 
       {/* Market header */}
       <div className="bg-white/95 backdrop-blur rounded-xl shadow-lg overflow-hidden mb-6">
-        <div className="bg-gradient-to-r from-purple-600 to-pink-600 p-8 text-white">
-          <div className="flex justify-between items-start mb-4">
-            <h1 className="text-4xl font-bold">{marketName}</h1>
+        <div className="bg-gradient-to-r from-purple-600 to-pink-600 p-4 md:p-8 text-white">
+          <div className="flex justify-between items-start mb-4 gap-2">
+            <h1 className="text-2xl md:text-4xl font-bold">{marketName}</h1>
             <span className={`px-4 py-2 rounded-full text-sm font-semibold ${
               projectData?.isSettled
                 ? 'bg-green-500'
