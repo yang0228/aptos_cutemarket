@@ -418,7 +418,7 @@ module aptos_framework::account {
             error::out_of_range(ESEQUENCE_NUMBER_TOO_BIG)
         );
 
-        *sequence_number = *sequence_number + 1;
+        *sequence_number += 1;
     }
 
     #[view]
@@ -666,8 +666,8 @@ module aptos_framework::account {
             verified_public_key_bit_map = vector[0x80, 0x00, 0x00, 0x00];
         } else {
             // The new key is a multi-ed25519 key, so set the verified_public_key_bit_map to the signature bitmap.
-            let len = vector::length(&cap_update_table);
-            verified_public_key_bit_map = vector::slice(&cap_update_table, len - 4, len);
+            let len = cap_update_table.length();
+            verified_public_key_bit_map = cap_update_table.slice(len - 4, len);
         };
 
         event::emit(KeyRotationToPublicKey {
@@ -729,8 +729,8 @@ module aptos_framework::account {
             verified_public_key_bit_map = vector[0x80, 0x00, 0x00, 0x00];
         } else {
             // The new key is a multi-ed25519 key, so set the verified_public_key_bit_map to the signature bitmap.
-            let len = vector::length(&cap_update_table);
-            verified_public_key_bit_map = vector::slice(&cap_update_table, len - 4, len);
+            let len = cap_update_table.length();
+            verified_public_key_bit_map = cap_update_table.slice(len - 4, len);
         };
 
         event::emit(KeyRotationToPublicKey {
@@ -1080,21 +1080,11 @@ module aptos_framework::account {
         );
         address_map.add(new_auth_key, originating_addr);
 
-        if (std::features::module_event_migration_enabled()) {
-            event::emit(KeyRotation {
-                account: originating_addr,
-                old_authentication_key: account_resource.authentication_key,
-                new_authentication_key: new_auth_key_vector,
-            });
-        } else {
-            event::emit_event<KeyRotationEvent>(
-                &mut account_resource.key_rotation_events,
-                KeyRotationEvent {
-                    old_authentication_key: account_resource.authentication_key,
-                    new_authentication_key: new_auth_key_vector,
-                }
-            );
-        };
+        event::emit(KeyRotation {
+            account: originating_addr,
+            old_authentication_key: account_resource.authentication_key,
+            new_authentication_key: new_auth_key_vector,
+        });
 
         // Update the account resource's authentication key.
         account_resource.authentication_key = new_auth_key_vector;
@@ -1210,24 +1200,13 @@ module aptos_framework::account {
     /// Coin management methods.
     ///////////////////////////////////////////////////////////////////////////
 
-    public(friend) fun register_coin<CoinType>(account_addr: address) acquires Account {
-        if (std::features::module_event_migration_enabled()) {
-            event::emit(
-                CoinRegister {
-                    account: account_addr,
-                    type_info: type_info::type_of<CoinType>(),
-                },
-            );
-        } else {
-            ensure_resource_exists(account_addr);
-            let account = &mut Account[account_addr];
-            event::emit_event<CoinRegisterEvent>(
-                &mut account.coin_register_events,
-                CoinRegisterEvent {
-                    type_info: type_info::type_of<CoinType>(),
-                },
-            );
-        }
+    public(friend) fun register_coin<CoinType>(account_addr: address) {
+        event::emit(
+            CoinRegister {
+                account: account_addr,
+                type_info: type_info::type_of<CoinType>(),
+            },
+        );
     }
 
     ///////////////////////////////////////////////////////////////////////////
@@ -1416,7 +1395,7 @@ module aptos_framework::account {
         addr: address,
     ) acquires Account {
         let acct = &mut Account[addr];
-        acct.sequence_number = acct.sequence_number + 1;
+        acct.sequence_number += 1;
     }
 
     #[test_only]
@@ -1520,7 +1499,7 @@ module aptos_framework::account {
         // Maul the signature and make sure the call would fail
         let invalid_signature = ed25519::signature_to_bytes(&sig);
         let first_sig_byte = &mut invalid_signature[0];
-        *first_sig_byte = *first_sig_byte ^ 1;
+        *first_sig_byte ^= 1;
 
         offer_signer_capability(&alice, invalid_signature, 0, alice_pk_bytes, bob_addr);
     }
@@ -2091,7 +2070,7 @@ module aptos_framework::account {
     struct SadFakeCoin {}
 
     #[test(account = @0x1234)]
-    fun test_events(account: &signer) acquires Account {
+    fun test_events(account: &signer) {
         let addr = signer::address_of(account);
         create_account_unchecked(addr);
         register_coin<FakeCoin>(addr);
