@@ -4,6 +4,7 @@ import { Header } from './components/Header';
 import { WalletButton } from './components/WalletButton';
 import { Home } from './pages/Home';
 import { ProjectDetail } from './pages/ProjectDetail';
+import { Portfolio } from './pages/Portfolio';
 
 function App() {
   return (
@@ -15,6 +16,7 @@ function App() {
           <Routes>
             <Route path="/" element={<Home />} />
             <Route path="/project/:id" element={<ProjectDetail />} />
+            <Route path="/portfolio" element={<Portfolio />} />
           </Routes>
         </div>
       </Router>
