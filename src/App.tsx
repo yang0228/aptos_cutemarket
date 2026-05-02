@@ -5,6 +5,7 @@ import { WalletButton } from './components/WalletButton';
 import { Home } from './pages/Home';
 import { ProjectDetail } from './pages/ProjectDetail';
 import { Portfolio } from './pages/Portfolio';
+import { CreateMarket } from './pages/CreateMarket';
 
 function App() {
   return (
@@ -17,6 +18,7 @@ function App() {
             <Route path="/" element={<Home />} />
             <Route path="/project/:id" element={<ProjectDetail />} />
             <Route path="/portfolio" element={<Portfolio />} />
+            <Route path="/create" element={<CreateMarket />} />
           </Routes>
         </div>
       </Router>
