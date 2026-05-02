@@ -4,6 +4,7 @@ module cutemarket::governance {
     use aptos_framework::event;
 
     friend cutemarket::market_core;
+    friend cutemarket::amm;
     friend cutemarket::oracle;
 
     // Error codes
