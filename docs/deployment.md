@@ -12,47 +12,57 @@ aptos --version
 ### 初始化钱包
 
 ```bash
-aptos init --network testnet
+aptos init --network testnet --profile testnet
 ```
 
 记录输出的地址：`0xYOUR_ADDRESS`
 
 ### 获取测试币
 
-```bash
-aptos account fund-with-faucet --account default
-```
+访问 https://aptos.dev/network/faucet 输入地址领取（CLI 方式已废弃）。
 
 ### 编译合约
 
 ```bash
 cd move
-aptos move compile --named-addresses cutemarket=default
+aptos move compile
 ```
 
 ### 部署合约
 
 ```bash
-aptos move publish --named-addresses cutemarket=default --assume-yes
+aptos move publish --profile testnet --assume-yes
 ```
 
-### 初始化市场
+### 初始化（按顺序）
 
 ```bash
-aptos move run \
-  --function-id YOUR_ADDRESS::prediction_market::initialize \
-  --assume-yes
+# 1. 初始化 governance
+aptos move run --function-id YOUR_ADDRESS::governance::initialize --profile testnet --assume-yes
+
+# 2. 初始化 market_core
+aptos move run --function-id YOUR_ADDRESS::market_core::initialize_market_list --profile testnet --assume-yes
+```
+
+### 创建测试市场
+
+```bash
+npx tsx scripts/seed-markets.ts <your-private-key>
 ```
 
 ### 验证
 
 ```bash
 aptos move view \
-  --function-id YOUR_ADDRESS::prediction_market::get_project_info \
-  --args u64:0
+  --function-id YOUR_ADDRESS::market_core::get_market_state \
+  --args address:0x...
 ```
 
-应返回项目 0 的数据。
+## 当前部署信息
+
+- **合约地址:** `0xf28e42120ec3007579f530ac426b2d553f501681431a433f3584bf6d37c94f16`
+- **Explorer:** [查看交易](https://explorer.aptoslabs.com/account/0xf28e42120ec3007579f530ac426b2d553f501681431a433f3584bf6d37c94f16/transactions?network=testnet)
+- **测试市场:** 6 个（BTC、FIFA、ETH/BTC、美国总统、Apple AR、APT 价格方向）
 
 ## 前端配置
 
@@ -69,11 +79,6 @@ export const MODULE_ADDRESS = '0xYOUR_ADDRESS';
 ```bash
 # .env
 VITE_MODULE_ADDRESS=0xYOUR_ADDRESS
-```
-
-代码已支持环境变量：
-```typescript
-export const MODULE_ADDRESS = import.meta.env.VITE_MODULE_ADDRESS || '0x8ebb...';
 ```
 
 ## 前端部署（Vercel）
@@ -126,7 +131,7 @@ git push
 ```toml
 [dependencies.AptosFramework]
 git = "https://github.com/aptos-labs/aptos-core.git"
-rev = "mainnet"  # 改为 mainnet
+rev = "mainnet"
 ```
 
 ### 2. 修改前端网络
@@ -139,12 +144,12 @@ const config = new AptosConfig({ network: Network.MAINNET });
 ### 3. 重新部署合约
 
 ```bash
-aptos move publish --named-addresses cutemarket=default --network mainnet --assume-yes
+aptos move publish --profile mainnet --assume-yes
 ```
 
-### 4. 更新合约地址
+### 4. 初始化并更新地址
 
-主网部署后会获得新地址，更新 `MODULE_ADDRESS`。
+部署后按顺序初始化 governance → market_core，然后更新 `MODULE_ADDRESS`。
 
 ## 部署检查清单
 

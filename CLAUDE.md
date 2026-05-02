@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-CuteMarket is a decentralized prediction market on Aptos (similar to Polymarket). No backend or database — all data lives on-chain. Built during a 3-hour hackathon, deployed on Aptos Testnet.
+CuteMarket is a decentralized prediction market on Aptos (similar to Polymarket). No backend or database — all data lives on-chain. Deployed on Aptos Testnet.
 
 ## Commands
 
@@ -22,37 +22,46 @@ No test framework or linter is configured. `npm run build` runs `tsc` first, so 
 
 ### Frontend (React SPA)
 
-- **Entry**: `src/main.tsx` → `src/App.tsx` (Router + WalletProvider wrapper)
-- **Routes**: `/` (Home) → `/project/:id` (ProjectDetail)
+- **Entry**: `src/main.tsx` → `src/App.tsx` (Router + WalletProvider + ErrorBoundary)
+- **Routes**: `/` (Home), `/project/:id` (ProjectDetail), `/portfolio` (Portfolio), `/create` (CreateMarket)
 - **Wallet**: `@aptos-labs/wallet-adapter-react` with PetraWallet, configured in `src/context/WalletProvider.tsx` (Testnet)
 - **Chain SDK**: `@aptos-labs/ts-sdk` configured in `src/config/aptos.ts`
 - **Styling**: Tailwind CSS — all styling is inline utility classes, no CSS modules
 
-**Data flow**: Custom hooks (`useProjectData`, `useUserBets`, `useAllUserBets`) call Aptos view functions directly via `aptos.view()`. Data polls every 10 seconds. All values on-chain are in Octas; conversion happens at the hook boundary using `octasToApt()`/`aptToOctas()` from `src/config/aptos.ts`.
+**Data flow**: Custom hooks (`useMarkets`, `useProjectData`, `useUserPositions`) call Aptos view functions directly via `aptos.view()`. Market list comes from scanning contract transactions (`getAccountTransactions`). All values on-chain are in Octas; conversion happens at the hook boundary using `octasToApt()`/`aptToOctas()` from `src/config/aptos.ts`.
 
 **Key hooks**:
-- `useProjectData(projectId)` — fetches project pool data from chain, returns `ProjectData`
-- `useUserBets(address, projectId)` — fetches user's bet amounts for one project
-- `useAllUserBets(address)` — aggregates user bets across all projects (for Home portfolio view)
+- `useMarkets()` — fetches all markets from contract events, enriches with on-chain state
+- `useProjectData(marketId, marketAddress)` — fetches market state from `market_core::get_market_state`
+- `useUserPositions(address)` — fetches user positions across all markets with P&L
 
-**Odds calculation**: `src/utils/oddsCalculator.ts` — pure functions, no chain calls. Formula: `odds = (totalPool * 0.98) / optionPool` (2% platform fee).
+**Odds calculation**: `src/utils/oddsCalculator.ts` — pure functions, no chain calls. Uses Constant Sum AMM pricing.
 
-### Smart Contract (Move)
+### Smart Contract (Move) — Modular Architecture
 
-- **Module**: `cutemarket::prediction_market` in `move/sources/cutemarket.move`
-- **Contract address**: `0x8ebb5f208e99f14584dc352204b107f8c9570a8481cf23e830fee296bd1515cb`
+- **Contract address**: `0xf28e42120ec3007579f530ac426b2d553f501681431a433f3584bf6d37c94f16`
 - **Network**: Aptos Testnet
 - **Dependencies**: AptosFramework (mainnet rev)
 
-**Entry functions**: `initialize` (one-time, creates 5 built-in projects), `place_bet` (user bets), `settle_project` (admin-only, distributes prizes)
+5 modules in `move/sources/`:
 
-**View functions**: `get_project_info(project_id)`, `get_user_bets(project_id, user_addr)`
+| Module | Purpose |
+|--------|---------|
+| `governance` | MarketRegistry, admin management, fee config, pause |
+| `market_core` | MarketState, create_market, view functions |
+| `amm` | buy_shares, sell_shares, add_liquidity, get_option_price |
+| `oracle` | settle_with_pyth, propose/execute_admin_settlement, claim_winnings |
+| `events` | Event structs and emit helpers |
 
-**Key constants**: `MIN_BET_AMOUNT = 1_000_000` (0.01 APT), `platform_fee_rate = 2` (percent)
+**Key entry functions**: `governance::initialize`, `market_core::initialize_market_list`, `market_core::create_market`, `amm::buy_shares`, `amm::sell_shares`, `oracle::propose_admin_settlement`, `oracle::claim_winnings`
 
-### Static Data
+**Key view functions**: `market_core::get_market_meta`, `market_core::get_market_state`, `amm::get_option_price`
 
-5 prediction markets are hardcoded in both the Move contract (`initialize`) and `src/data/projects.ts`. These must stay in sync — same IDs, same option counts. The frontend `Project.id` maps directly to the on-chain project index.
+## Test Account
+
+- **Deployer/Admin**: `0xf28e42120ec3007579f530ac426b2d553f501681431a433f3584bf6d37c94f16`
+- **Explorer**: https://explorer.aptoslabs.com/account/0xf28e42120ec3007579f530ac426b2d553f501681431a433f3584bf6d37c94f16/transactions?network=testnet
+- **Seed script**: `npx tsx scripts/seed-markets.ts <private-key>` creates 6 test markets
 
 ## Unit Conversion
 

@@ -2,12 +2,12 @@
 
 Decentralized prediction market on Aptos. Similar to Polymarket — no backend, no database, all data on-chain.
 
-Built during a 3-hour hackathon. Deployed on Aptos Testnet.
+Deployed on Aptos Testnet.
 
 ## Tech Stack
 
-- **Frontend:** React 18, TypeScript, Vite, Tailwind CSS
-- **Contract:** Move (Aptos Framework)
+- **Frontend:** React 18, TypeScript, Vite, Tailwind CSS, recharts
+- **Contract:** Move (Aptos Framework) — 5 modules (governance, market_core, amm, oracle, events)
 - **Wallet:** @aptos-labs/wallet-adapter-react (Petra)
 - **Network:** Aptos Testnet
 
@@ -20,10 +20,35 @@ npm run dev
 
 Open http://localhost:5173
 
+### Seed Test Data
+
+```bash
+# Generate a new account
+npx tsx scripts/seed-markets.ts --generate
+
+# Fund at https://aptos.dev/network/faucet, then create 6 test markets
+npx tsx scripts/seed-markets.ts <private-key>
+```
+
+## Contract Info
+
+- **Address:** `0xf28e42120ec3007579f530ac426b2d553f501681431a433f3584bf6d37c94f16`
+- **Explorer:** [View on Testnet](https://explorer.aptoslabs.com/account/0xf28e42120ec3007579f530ac426b2d553f501681431a433f3584bf6d37c94f16/transactions?network=testnet)
+
+## Features
+
+- Browse prediction markets with search, category filter, and sorting
+- Buy/sell shares with real-time AMM pricing
+- Price chart and trade history per market
+- Portfolio page with P&L tracking
+- Create new markets (any connected wallet)
+- Claim winnings for settled markets
+- Responsive design with loading skeletons
+
 ## Documentation
 
 **For users:**
-- [User Guide](docs/user-guide.md) — How to connect wallet, place bets, understand odds
+- [User Guide](docs/user-guide.md) — How to connect wallet, trade, understand odds
 
 **For developers:**
 - [Quickstart](docs/quickstart.md) — Get the project running locally

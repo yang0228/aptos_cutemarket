@@ -21,34 +21,50 @@ npm run dev
 ```
 src/
 ├── main.tsx                    # 入口
-├── App.tsx                     # 路由 + 钱包 Provider
+├── App.tsx                     # 路由 + ErrorBoundary + 钱包 Provider
 ├── components/
-│   ├── Header.tsx              # 顶部导航栏
-│   ├── ProjectCard.tsx         # 首页项目卡片
-│   └── WalletButton.tsx        # 钱包连接按钮
+│   ├── Header.tsx              # 顶部导航栏（市场/持仓/创建市场）
+│   ├── WalletButton.tsx        # 钱包连接按钮
+│   ├── MarketCard.tsx          # 首页市场卡片
+│   ├── OrderPanel.tsx          # 交易面板（买入/卖出）
+│   ├── PriceChart.tsx          # 价格走势图（recharts）
+│   ├── TradeHistory.tsx        # 交易历史列表
+│   ├── ClaimButton.tsx         # 领取奖金按钮
+│   ├── Skeleton.tsx            # 加载骨架屏组件
+│   └── ErrorBoundary.tsx       # 错误边界
 ├── pages/
-│   ├── Home.tsx                # 首页（项目列表 + 投资组合）
-│   └── ProjectDetail.tsx       # 项目详情（下注页面）
+│   ├── Home.tsx                # 首页（市场列表 + 搜索/筛选 + 投资组合）
+│   ├── ProjectDetail.tsx       # 市场详情（交易面板 + 价格图 + 历史）
+│   ├── Portfolio.tsx           # 用户持仓（P&L + 领奖）
+│   └── CreateMarket.tsx        # 创建市场表单
 ├── hooks/
-│   ├── useProjectData.ts       # 从链上读取单个项目数据
-│   ├── useUserBets.ts          # 读取用户在某项目的下注
-│   └── useAllUserBets.ts       # 聚合用户所有项目的下注
+│   ├── useMarkets.ts           # 从链上事件获取所有市场列表
+│   ├── useProjectData.ts       # 从链上读取单个市场数据
+│   └── useUserPositions.ts     # 用户持仓 + P&L 计算
+├── services/
+│   └── indexer.ts              # 链上事件索引（getAccountTransactions）
 ├── utils/
-│   ├── oddsCalculator.ts       # 赔率与预期收益计算
-│   └── dateUtils.ts            # 日期格式化
+│   └── oddsCalculator.ts       # 赔率与概率计算（AMM 定价）
 ├── config/
 │   └── aptos.ts                # Aptos SDK 配置、合约地址、单位转换
 ├── context/
 │   └── WalletProvider.tsx      # 钱包适配器配置
-├── data/
-│   └── projects.ts             # 5 个内置项目定义（需与合约同步）
 └── types/
     └── index.ts                # TypeScript 类型定义
 
 move/
 ├── Move.toml                   # 合约依赖配置
 └── sources/
-    └── cutemarket.move         # 预测市场智能合约
+    ├── governance.move          # 管理员注册表、权限
+    ├── market_core.move         # 市场状态、创建、view
+    ├── amm.move                 # AMM 交易逻辑
+    ├── oracle.move              # 结算、领奖
+    └── events.move              # 事件定义
+
+scripts/
+├── seed-markets.ts             # 创建测试市场的脚本
+├── faucet.ts                   # 测试币领取辅助
+└── test-events.ts              # 事件 API 调试脚本
 ```
 
 ## 关键文件说明
@@ -56,14 +72,23 @@ move/
 | 文件 | 作用 |
 |------|------|
 | `src/config/aptos.ts` | 合约地址、网络配置、APT/Octas 转换函数 |
-| `src/data/projects.ts` | 前端项目定义，必须与合约 `initialize()` 保持同步 |
-| `src/hooks/useProjectData.ts` | 核心数据 hook，每 10 秒从链上轮询 |
-| `src/utils/oddsCalculator.ts` | 纯函数，无链上调用 |
-| `move/sources/cutemarket.move` | 合约源码，所有链上逻辑 |
+| `src/services/indexer.ts` | 通过 getAccountTransactions 获取链上事件 |
+| `src/hooks/useMarkets.ts` | 市场列表 hook，每 30 秒轮询 |
+| `src/hooks/useProjectData.ts` | 市场详情 hook，每 10 秒轮询 |
+| `src/utils/oddsCalculator.ts` | AMM 定价计算，纯函数 |
+| `move/sources/*.move` | 5 个合约模块源码 |
 
-## 合约部署（可选）
+## 创建测试数据
 
-如果需要重新部署合约，参见 [deployment.md](deployment.md)。
+```bash
+# 生成新账户
+npx tsx scripts/seed-markets.ts --generate
+
+# 去水龙头领 APT：https://aptos.dev/network/faucet
+
+# 创建 6 个测试市场
+npx tsx scripts/seed-markets.ts <private-key>
+```
 
 ## 生产构建
 

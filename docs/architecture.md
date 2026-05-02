@@ -12,9 +12,12 @@ CuteMarket 是一个纯前端 DApp，没有后端服务器或数据库。所有�
        │
        ▼
   Aptos Testnet
-  └─ prediction_market 合约
-       ├─ MarketState（全局状态）
-       └─ 5 个内置 Project
+  └─ 模块化合约（5 个模块）
+       ├─ governance（管理员注册表、权限、费率）
+       ├─ market_core（市场状态、创建市场）
+       ├─ amm（买卖份额、流动性、定价）
+       ├─ oracle（结算、Pyth 预言机、领奖）
+       └─ events（事件定义和发射）
 ```
 
 ## 前端架构
@@ -22,41 +25,47 @@ CuteMarket 是一个纯前端 DApp，没有后端服务器或数据库。所有�
 ### 入口与路由
 
 ```
-main.tsx → App.tsx → WalletProvider → Router
-                                        ├─ / → Home
-                                        └─ /project/:id → ProjectDetail
+main.tsx → App.tsx → ErrorBoundary → WalletProvider → Router
+                                                        ├─ / → Home
+                                                        ├─ /project/:id → ProjectDetail
+                                                        ├─ /portfolio → Portfolio
+                                                        └─ /create → CreateMarket
 ```
 
 - `WalletProvider` 使用 `@aptos-labs/wallet-adapter-react`，配置 Petra 钱包和 Testnet 网络
-- 两条路由，无嵌套路由
+- `ErrorBoundary` 捕获渲染错误，显示友好错误页
+- 四条路由，无嵌套路由
 
 ### 数据获取
 
-三个自 hook 负责所有链上数据读取：
+三个自定义 hook 负责所有链上数据读取：
 
 | Hook | 用途 | 数据源 |
 |------|------|--------|
-| `useProjectData(projectId)` | 单个项目的状态和投注池 | `get_project_info` view 函数 |
-| `useUserBets(address, projectId)` | 用户在某项目的下注记录 | `get_user_bets` view 函数 |
-| `useAllUserBets(address)` | 聚合用户在所有项目的下注 | 多次调用 `get_user_bets` |
+| `useMarkets()` | 所有市场列表 + 状态 | `getAccountTransactions` 扫描事件 + `get_market_state` view |
+| `useProjectData(marketId, marketAddress)` | 单个市场详情 | `get_market_state` view 函数 |
+| `useUserPositions(address)` | 用户所有市场的持仓和 P&L | 多次调用 view + `get_option_price` |
 
-所有 hook 使用 `setInterval` 每 10 秒轮询链上数据。下注成功后手动触发刷新。
+事件数据通过 `getAccountTransactions` 获取（Aptos indexer 的 `events` 表已废弃）。
+
+所有 hook 使用 `setInterval` 轮询链上数据（市场列表 30 秒，详情 10 秒）。交易成功后手动触发刷新。
 
 ### 数据流
 
 ```
 页面加载
-  → useProjectData 调用 aptos.view()
+  → useMarkets 调用 getAccountTransactions 获取 MarketCreatedEvent
+  → 对每个市场调用 get_market_state view
   → 返回 Octas 值
   → octasToApt() 转换
   → React state 更新
   → UI 渲染
 
-用户下注
-  → 前端验证输入
-  → signAndSubmitTransaction() 调用合约
+用户交易
+  → OrderPanel 验证输入
+  → signAndSubmitTransaction() 调用 amm::buy_shares / sell_shares
   → 等待交易确认
-  → 手动刷新所有 hook
+  → 触发 refetch + fetchTradeEvents
   → UI 更新
 ```
 
@@ -82,71 +91,51 @@ UI 层只处理 APT，合约层只处理 Octas。
 ### 模块结构
 
 ```
-cutemarket::prediction_market
-├── MarketState（全局状态 resource）
-│   ├── admin: address
-│   ├── projects: vector<Project>
-│   └── platform_fee_rate: u64（2%）
-│
-├── Entry Functions（需要签名）
-│   ├── initialize()        — 一次性初始化，创建 5 个项目
-│   ├── place_bet()         — 用户下注
-│   └── settle_project()    — 管理员结算
-│
-└── View Functions（只读）
-    ├── get_project_info()  — 查询项目状态和投注池
-    └── get_user_bets()     — 查询用户下注记录
+move/sources/
+├── governance.move     — MarketRegistry、admin 管理、费率、暂停
+├── market_core.move    — MarketState、create_market、view 函数
+├── amm.move            — buy_shares、sell_shares、add_liquidity、定价
+├── oracle.move         — 结算（admin/Pyth）、claim_winnings
+└── events.move         — 6 个事件结构体和发射辅助函数
 ```
 
-### 内置项目
+### 关键数据结构
 
-合约 `initialize()` 创建 5 个项目，前端 `src/data/projects.ts` 必须保持同步（相同的 ID 和选项数量）：
+**MarketState**（每个市场一个 resource，存在资源账户上）：
+- market_id, name, description, options
+- option_pools (每选项池), total_pool
+- end_timestamp, resolution_type, is_settled, winning_option
+- lp_supply, lp_balances, user_bets
 
-| ID | 选项数 | 结束时间 |
-|----|--------|----------|
-| 0 | 2 | 2026-12-25 |
-| 1 | 2 | 2026-11-15 |
-| 2 | 2 | 2026-12-31 |
-| 3 | 3 | 2026-10-10 |
-| 4 | 4 | 2026-07-19 |
+**MarketMeta**（存在 MarketList 中）：
+- market_id, market_address, creator, category, created_at
 
-## 赔率计算
+**MarketList**（全局 resource，存在部署者账户上）：
+- markets: vector<MarketMeta>
 
-赔率计算是纯前端逻辑（`src/utils/oddsCalculator.ts`），不涉及链上调用。
+### AMM 定价模型
 
-### 公式
+使用 Constant Sum AMM：
+- price = option_pool / total_pool（以 BPS 表示，10000 = 100%）
+- 买入时价格上升，卖出时价格下降
+- 每笔交易收取 2% 手续费
 
-```
-奖池 = 总投注额 × (1 - 手续费率)
-赔率 = 奖池 / 该选项投注额
-隐含概率 = 该选项投注额 / 总投注额 × 100%
-```
+### 事件系统
 
-### 预期收益
-
-```
-新选项池 = 当前选项池 + 用户投注
-新总池 = 当前总池 + 用户投注
-新奖池 = 新总池 × (1 - 手续费率)
-预期收益 = (用户投注 / 新选项池) × 新奖池
-```
-
-### 示例
-
-假设某项目有两个选项，总投注 150 APT：
-- 选项 A：100 APT（赔率 x1.47，概率 66.7%）
-- 选项 B：50 APT（赔率 x2.94，概率 33.3%）
-
-用户在选项 B 投注 10 APT：
-- 新选项 B 池 = 60 APT
-- 新总池 = 160 APT
-- 预期收益 = (10 / 60) × 156.8 = 26.13 APT
-- 盈利率 = +161%
+6 种链上事件：
+- `MarketCreatedEvent` — 市场创建
+- `SharesPurchasedEvent` — 买入份额
+- `SharesSoldEvent` — 卖出份额
+- `MarketSettledEvent` — 市场结算
+- `LiquidityAddedEvent` — 添加流动性
+- `WinningsClaimedEvent` — 领取奖金
 
 ## 设计决策
 
-**无后端** — 所有数据在链上，减少运维复杂度，增加去中心化程度。代价是轮询效率低于事件推送。
+**无后端** — 所有数据在链上，减少运维复杂度，增加去中心化程度。
 
-**轮询 vs 事件** — 使用 10 秒轮询而非链上事件监听。实现简单，但有延迟。适合 hackathon MVP。
+**模块化合约** — 5 个独立模块（governance, market_core, amm, oracle, events）取代旧的单文件合约。每个市场有独立的资源账户，实现资金隔离。
 
-**硬编码 5 个项目** — 合约和前端都硬编码了相同的 5 个项目。不支持动态创建项目，简化了合约逻辑。
+**事件驱动 + 轮询** — 通过链上事件获取市场列表，通过 view 函数获取详细状态。轮询间隔 10-30 秒。
+
+**动态市场创建** — 任何连接钱包的用户都可以创建市场（需要初始流动性）。不再硬编码市场。

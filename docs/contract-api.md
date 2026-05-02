@@ -2,186 +2,171 @@
 
 ## 模块信息
 
-- **模块地址:** `0x8ebb5f208e99f14584dc352204b107f8c9570a8481cf23e830fee296bd1515cb`
-- **模块名:** `prediction_market`
+- **合约地址:** `0xf28e42120ec3007579f530ac426b2d553f501681431a433f3584bf6d37c94f16`
 - **网络:** Aptos Testnet
+- **Explorer:** [查看合约](https://explorer.aptoslabs.com/account/0xf28e42120ec3007579f530ac426b2d553f501681431a433f3584bf6d37c94f16/transactions?network=testnet)
+
+## 模块列表
+
+| 模块 | 用途 |
+|------|------|
+| `governance` | MarketRegistry、管理员管理、费率配置、暂停 |
+| `market_core` | 市场状态、创建市场、view 函数 |
+| `amm` | 买卖份额、流动性管理、定价 |
+| `oracle` | 结算（管理员/Pyth）、领取奖金 |
+| `events` | 事件结构体和发射辅助函数 |
+
+---
+
+## governance
+
+### initialize()
+
+初始化 MarketRegistry。部署后首先调用。
+
+```bash
+aptos move run \
+  --function-id 0xf28e...::governance::initialize \
+  --profile testnet --assume-yes
+```
+
+### add_admin(new_admin)
+
+添加管理员。
+
+### remove_admin(remove_addr)
+
+移除管理员。
+
+### set_fee(new_fee_bps)
+
+设置平台手续费（BPS，100 = 1%）。
+
+### toggle_pause()
+
+暂停/恢复市场。
+
+---
+
+## market_core
+
+### initialize_market_list()
+
+初始化 MarketList resource。创建市场前必须先调用。
+
+```bash
+aptos move run \
+  --function-id 0xf28e...::market_core::initialize_market_list \
+  --profile testnet --assume-yes
+```
+
+### create_market(...)
+
+创建新市场。参数：
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| name | String | 市场名称（1-100 字符） |
+| description | String | 描述（1-500 字符） |
+| options | vector<String> | 选项列表（2-10 个） |
+| end_timestamp | u64 | 结束时间（Unix 秒，至少 1 小时后） |
+| category | u8 | 分类（0=体育, 1=加密, 2=政治, 3=娱乐, 4=科技, 5=其他） |
+| resolution_type | u8 | 结算方式（0=管理员, 1=Pyth 预言机） |
+| pyth_price_id | vector<u8> | Pyth 价格 ID（管理员结算时为空） |
+| pyth_threshold | u64 | Pyth 阈值 |
+| pyth_above_wins | bool | 高于阈值是否获胜 |
+| initial_liquidity | u64 | 初始流动性（Octas，最少 1 APT） |
+
+### get_market_meta(market_id)
+
+查询市场元数据。返回：market_id, market_address, creator, category, created_at。
+
+### get_market_state(market_address)
+
+查询市场完整状态。返回 9 个值：
+1. market_id
+2. name
+3. description
+4. options (vector<String>)
+5. option_pools (vector<u64>)
+6. total_pool (u64)
+7. end_timestamp (u64)
+8. is_settled (bool)
+9. winning_option (u64)
+
+```bash
+aptos move view \
+  --function-id 0xf28e...::market_core::get_market_state \
+  --args address:0x1d93f3ac36662ed14883ceadca4a5b9af30957fa5c93c1c656469c63de399148
+```
+
+---
+
+## amm
+
+### buy_shares(market_id, option_index, amount)
+
+购买份额。amount 为支付的 APT 数量（Octas）。
+
+### sell_shares(market_id, option_index, shares)
+
+出售份额。shares 为要卖出的份额数量。
+
+### add_liquidity(market_id, amount)
+
+向市场添加流动性。
+
+### get_option_price(market_address, option_index)
+
+查询选项当前价格（BPS，10000 = 100%）。
+
+---
+
+## oracle
+
+### propose_admin_settlement(market_id, winning_option)
+
+管理员提议结算（需在 dispute period 后执行）。
+
+### execute_admin_settlement(market_id)
+
+执行已提议的结算。
+
+### settle_with_pyth(market_id, pyth_price)
+
+使用 Pyth 价格结算。
+
+### claim_winnings(market_id)
+
+用户领取获胜奖金。
+
+```bash
+aptos move run \
+  --function-id 0xf28e...::oracle::claim_winnings \
+  --args u64:0 \
+  --profile testnet --assume-yes
+```
+
+---
+
+## events
+
+6 种事件类型：
+
+| 事件 | 字段 |
+|------|------|
+| `MarketCreatedEvent` | market_id, market_address, creator, name, options, end_timestamp, category |
+| `SharesPurchasedEvent` | market_id, user, option_index, amount, shares_received, new_price_bps, timestamp |
+| `SharesSoldEvent` | market_id, user, option_index, shares, amount_received, new_price_bps, timestamp |
+| `MarketSettledEvent` | market_id, winning_option, total_pool, timestamp |
+| `LiquidityAddedEvent` | market_id, provider, amount, new_total_pool |
+| `WinningsClaimedEvent` | market_id, user, amount |
 
 ## 常量
 
 | 常量 | 值 | 说明 |
 |------|-----|------|
-| `MIN_BET_AMOUNT` | 1,000,000 Octas | 最小下注金额（0.01 APT） |
-| `platform_fee_rate` | 2 | 平台手续费百分比 |
-
-## 数据结构
-
-### Project
-
-```move
-struct Project has store {
-    id: u64,                    // 项目 ID
-    name: vector<u8>,           // 项目名称
-    options_count: u64,         // 选项数量
-    end_timestamp: u64,         // 结束时间（Unix 秒）
-    is_settled: bool,           // 是否已结算
-    winning_option: u64,        // 获胜选项索引
-    option_pools: vector<u64>,  // 每个选项的总投注额（Octas）
-    bets: vector<UserBet>,      // 所有下注记录
-}
-```
-
-### UserBet
-
-```move
-struct UserBet has store, drop {
-    user: address,      // 下注者地址
-    option_index: u64,  // 选项索引
-    amount: u64,        // 下注金额（Octas）
-}
-```
-
-### MarketState
-
-```move
-struct MarketState has key {
-    admin: address,             // 管理员地址（合约部署者）
-    projects: vector<Project>,  // 所有项目
-    platform_fee_rate: u64,     // 手续费率（2%）
-}
-```
-
-## Entry Functions
-
-### initialize()
-
-初始化市场，创建 5 个内置项目。只能由部署者调用一次。
-
-```bash
-aptos move run \
-  --function-id 0x8ebb5f208e99f14584dc352204b107f8c9570a8481cf23e830fee296bd1515cb::prediction_market::initialize \
-  --assume-yes
-```
-
-创建的 5 个项目：
-
-| ID | 名称 | 选项数 | 结束时间 |
-|----|------|--------|----------|
-| 0 | Trump Steps Down | 2 | 2026-12-25 |
-| 1 | cuteMarket Wins Tonight | 2 | 2026-11-15 |
-| 2 | Bitcoin Above 100K | 2 | 2026-12-31 |
-| 3 | Nobel Prize Region | 3 | 2026-10-10 |
-| 4 | 2026 World Cup Winner | 4 | 2026-07-19 |
-
-### place_bet(project_id, option_index, amount)
-
-用户下注。
-
-**参数：**
-- `project_id: u64` — 项目 ID（0-4）
-- `option_index: u64` — 选项索引（从 0 开始）
-- `amount: u64` — 下注金额（Octas，最少 1,000,000）
-
-**验证规则：**
-- project_id 有效
-- option_index < options_count
-- amount >= MIN_BET_AMOUNT
-- 当前时间 < end_timestamp
-- 项目未结算
-
-**效果：**
-- 从用户转账 amount Octas 到管理员地址
-- 更新对应选项的 option_pool
-- 记录一条 UserBet
-
-```bash
-aptos move run \
-  --function-id 0x8ebb5f208e99f14584dc352204b107f8c9570a8481cf23e830fee296bd1515cb::prediction_market::place_bet \
-  --args u64:0 u64:0 u64:10000000 \
-  --assume-yes
-```
-
-### settle_project(project_id, winning_option)
-
-结算项目并分配奖金。只有管理员可以调用。
-
-**参数：**
-- `project_id: u64` — 项目 ID
-- `winning_option: u64` — 获胜选项索引
-
-**验证规则：**
-- 调用者是管理员
-- project_id 有效
-- winning_option < options_count
-- 当前时间 >= end_timestamp
-- 项目未结算
-
-**奖金分配逻辑：**
-1. 计算总奖池 = 所有选项投注之和
-2. 手续费 = 总奖池 * 2%
-3. 净奖池 = 总奖池 - 手续费
-4. 对每个投注了获胜选项的用户：奖金 = (用户投注 / 获胜池总额) * 净奖池
-5. 自动转账到用户钱包
-
-```bash
-aptos move run \
-  --function-id 0x8ebb5f208e99f14584dc352204b107f8c9570a8481cf23e830fee296bd1515cb::prediction_market::settle_project \
-  --args u64:0 u64:0 \
-  --assume-yes
-```
-
-## View Functions
-
-### get_project_info(project_id)
-
-查询项目信息。
-
-**参数：**
-- `project_id: u64` — 项目 ID
-
-**返回：** `(u64, u64, bool, u64, vector<u64>)`
-- 项目 ID
-- 结束时间戳（Unix 秒）
-- 是否已结算
-- 获胜选项索引
-- 各选项投注池（Octas 数组）
-
-```bash
-aptos move view \
-  --function-id 0x8ebb5f208e99f14584dc352204b107f8c9570a8481cf23e830fee296bd1515cb::prediction_market::get_project_info \
-  --args u64:0
-```
-
-示例返回：
-```json
-["0", "1798160000", false, "0", ["50000000", "30000000"]]
-```
-
-### get_user_bets(project_id, user_addr)
-
-查询用户在某项目的下注记录。
-
-**参数：**
-- `project_id: u64` — 项目 ID
-- `user_addr: address` — 用户地址
-
-**返回：** `vector<u64>` — 该用户在该项目的所有下注金额（Octas 数组）
-
-```bash
-aptos move view \
-  --function-id 0x8ebb5f208e99f14584dc352204b107f8c9570a8481cf23e830fee296bd1515cb::prediction_market::get_user_bets \
-  --args u64:0 address:0x8ebb5f208e99f14584dc352204b107f8c9570a8481cf23e830fee296bd1515cb
-```
-
-## 错误码
-
-| 码 | 常量 | 说明 |
-|----|------|------|
-| 1 | E_NOT_INITIALIZED | 市场未初始化 |
-| 2 | E_ALREADY_INITIALIZED | 市场已初始化 |
-| 3 | E_INVALID_PROJECT_ID | 无效的项目 ID |
-| 4 | E_INVALID_OPTION_INDEX | 无效的选项索引 |
-| 5 | E_INSUFFICIENT_AMOUNT | 投注金额不足（< 0.01 APT） |
-| 6 | E_PROJECT_CLOSED | 项目已关闭（超过截止时间） |
-| 7 | E_PROJECT_NOT_CLOSED | 项目尚未关闭（结算前必须过期） |
-| 8 | E_ALREADY_SETTLED | 项目已结算 |
-| 9 | E_NOT_ADMIN | 非管理员调用 |
+| `MIN_BET_AMOUNT` | 1,0000,000 Octas | 最小交易金额（0.01 APT） |
+| `MIN_LIQUIDITY` | 100,000,000 Octas | 最小初始流动性（1 APT） |
+| `MAX_OPTIONS` | 10 | 最大选项数 |
+| `MIN_OPTIONS` | 2 | 最小选项数 |
