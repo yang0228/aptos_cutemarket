@@ -14,9 +14,6 @@ export const MODULES = {
   EVENTS: 'events',
 } as const;
 
-// Legacy module name (for backward compatibility during migration)
-export const MODULE_NAME = 'prediction_market';
-
 export const OCTAS_PER_APT = 100000000;
 
 export function octasToApt(octas: number): number {

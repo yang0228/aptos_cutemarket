@@ -1,26 +1,3 @@
-export interface Project {
-  id: number;
-  name: string;
-  options: string[];
-  endDate: string;
-  description?: string;
-  image?: string;
-}
-
-export enum ProjectStatus {
-  Open = 'open',
-  Closed = 'closed',
-  Settled = 'settled',
-}
-
-export interface BetOption {
-  index: number;
-  name: string;
-  totalAmount: number;
-}
-
-// New types for modular contract
-
 export interface MarketMeta {
   market_id: number;
   market_address: string;
