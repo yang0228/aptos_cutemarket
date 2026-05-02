@@ -1,6 +1,7 @@
 import { useWallet } from '@aptos-labs/wallet-adapter-react';
 import { useUserPositions } from '../hooks/useUserPositions';
 import { Link } from 'react-router-dom';
+import { ClaimButton } from '../components/ClaimButton';
 
 export function Portfolio() {
   const { account, connected } = useWallet();
@@ -56,11 +57,20 @@ export function Portfolio() {
                   {pos.marketName}
                 </Link>
                 {pos.isSettled && (
-                  <span className={`text-xs px-2 py-1 rounded-full ${
-                    pos.optionIndex === pos.winningOption ? 'bg-green-500 text-white' : 'bg-red-500 text-white'
-                  }`}>
-                    {pos.optionIndex === pos.winningOption ? '获胜' : '未中'}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className={`text-xs px-2 py-1 rounded-full ${
+                      pos.optionIndex === pos.winningOption ? 'bg-green-500 text-white' : 'bg-red-500 text-white'
+                    }`}>
+                      {pos.optionIndex === pos.winningOption ? '获胜' : '未中'}
+                    </span>
+                    {pos.optionIndex === pos.winningOption && (
+                      <ClaimButton
+                        marketId={pos.marketId}
+                        marketName={pos.marketName}
+                        isWinner={true}
+                      />
+                    )}
+                  </div>
                 )}
               </div>
               <div className="grid grid-cols-3 gap-4 mt-3">
