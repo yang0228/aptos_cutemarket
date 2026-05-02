@@ -1,5 +1,6 @@
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { WalletProvider } from './context/WalletProvider';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { Header } from './components/Header';
 import { WalletButton } from './components/WalletButton';
 import { Home } from './pages/Home';
@@ -9,6 +10,7 @@ import { CreateMarket } from './pages/CreateMarket';
 
 function App() {
   return (
+    <ErrorBoundary>
     <WalletProvider>
       <Router>
         <div className="min-h-screen">
@@ -23,6 +25,7 @@ function App() {
         </div>
       </Router>
     </WalletProvider>
+    </ErrorBoundary>
   );
 }
 
