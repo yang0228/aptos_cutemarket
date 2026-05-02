@@ -1,7 +1,8 @@
 import { useMemo } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 
 export function Header() {
+  const location = useLocation();
   const marqueeRows = useMemo(
     () =>
       [0, 1].map(() => {
@@ -57,6 +58,38 @@ export function Header() {
           </div>
         </Link>
       </div>
+      <nav className="container mx-auto px-4 pb-3 flex gap-4">
+        <Link
+          to="/"
+          className={`text-sm font-medium px-3 py-1 rounded-full transition-colors ${
+            location.pathname === '/'
+              ? 'bg-white/20 text-white'
+              : 'text-white/70 hover:text-white hover:bg-white/10'
+          }`}
+        >
+          市场
+        </Link>
+        <Link
+          to="/portfolio"
+          className={`text-sm font-medium px-3 py-1 rounded-full transition-colors ${
+            location.pathname === '/portfolio'
+              ? 'bg-white/20 text-white'
+              : 'text-white/70 hover:text-white hover:bg-white/10'
+          }`}
+        >
+          持仓
+        </Link>
+        <Link
+          to="/create"
+          className={`text-sm font-medium px-3 py-1 rounded-full transition-colors ${
+            location.pathname === '/create'
+              ? 'bg-white/20 text-white'
+              : 'text-white/70 hover:text-white hover:bg-white/10'
+          }`}
+        >
+          创建市场
+        </Link>
+      </nav>
     </header>
   );
 }
