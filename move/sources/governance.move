@@ -3,9 +3,8 @@ module cutemarket::governance {
     use std::vector;
     use aptos_framework::event;
 
-    // TODO: uncomment when market_core and oracle modules are created
-    // friend cutemarket::market_core;
-    // friend cutemarket::oracle;
+    friend cutemarket::market_core;
+    friend cutemarket::oracle;
 
     // Error codes
     const E_NOT_ADMIN: u64 = 100;
