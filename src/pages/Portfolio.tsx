@@ -2,6 +2,7 @@ import { useWallet } from '@aptos-labs/wallet-adapter-react';
 import { useUserPositions } from '../hooks/useUserPositions';
 import { Link } from 'react-router-dom';
 import { ClaimButton } from '../components/ClaimButton';
+import { PositionCardSkeleton } from '../components/Skeleton';
 
 export function Portfolio() {
   const { account, connected } = useWallet();
@@ -40,7 +41,11 @@ export function Portfolio() {
 
       {/* Positions list */}
       {loading ? (
-        <p className="text-white/80 text-center">加载中...</p>
+        <div className="space-y-4">
+          {[...Array(3)].map((_, i) => (
+            <PositionCardSkeleton key={i} />
+          ))}
+        </div>
       ) : summary.positions.length === 0 ? (
         <div className="bg-white/95 rounded-xl p-8 text-center">
           <p className="text-gray-600">暂无持仓</p>

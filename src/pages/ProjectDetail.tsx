@@ -7,6 +7,7 @@ import { OrderPanel } from '../components/OrderPanel';
 import { PriceChart } from '../components/PriceChart';
 import { TradeHistory } from '../components/TradeHistory';
 import { calculateOdds, formatOdds, formatProbability } from '../utils/oddsCalculator';
+import { Skeleton } from '../components/Skeleton';
 
 export function ProjectDetail() {
   const { id } = useParams<{ id: string }>();
@@ -81,8 +82,25 @@ export function ProjectDetail() {
   if (loadingMeta) {
     return (
       <div className="container mx-auto px-4 py-8">
-        <div className="bg-white/95 rounded-xl shadow-lg p-8 text-center">
-          <p className="text-gray-500">加载中...</p>
+        <Skeleton className="h-6 w-24 mb-6" />
+        <div className="bg-white/95 rounded-xl shadow-lg overflow-hidden mb-6">
+          <div className="bg-gradient-to-r from-purple-600 to-pink-600 p-8">
+            <Skeleton className="h-10 w-2/3 mb-4" />
+            <Skeleton className="h-5 w-1/3" />
+          </div>
+          <div className="p-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <Skeleton className="h-32" />
+              <Skeleton className="h-32" />
+            </div>
+          </div>
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <Skeleton className="h-96" />
+          <div className="lg:col-span-2 space-y-6">
+            <Skeleton className="h-80" />
+            <Skeleton className="h-64" />
+          </div>
         </div>
       </div>
     );

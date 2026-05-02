@@ -3,6 +3,7 @@ import { useWallet } from '@aptos-labs/wallet-adapter-react';
 import { useMarkets } from '../hooks/useMarkets';
 import { useUserPositions } from '../hooks/useUserPositions';
 import { MarketCard } from '../components/MarketCard';
+import { MarketCardSkeleton } from '../components/Skeleton';
 import { CATEGORY_LABELS } from '../types';
 
 export function Home() {
@@ -104,8 +105,10 @@ export function Home() {
 
       {/* Market grid */}
       {loading ? (
-        <div className="text-center py-12">
-          <p className="text-white/80 text-lg">加载中...</p>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {[...Array(6)].map((_, i) => (
+            <MarketCardSkeleton key={i} />
+          ))}
         </div>
       ) : filteredMarkets.length === 0 ? (
         <div className="text-center py-12">
