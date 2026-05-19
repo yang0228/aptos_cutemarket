@@ -51,7 +51,7 @@ module cutemarket::oracle {
 
         // Execute settlement
         market_core::settle_market(market_addr, winner);
-        events::emit_market_settled(market_id, winner, market_core::get_total_pool(market_addr), now);
+        events::emit_market_settled(market_id, winner, market_core::get_betting_pool_total(market_addr), now);
     }
 
     // Propose admin settlement (enters dispute period)
@@ -100,7 +100,7 @@ module cutemarket::oracle {
 
         // Execute settlement
         market_core::settle_market(market_addr, winner);
-        events::emit_market_settled(market_id, winner, market_core::get_total_pool(market_addr), now);
+        events::emit_market_settled(market_id, winner, market_core::get_betting_pool_total(market_addr), now);
 
         // Clean up pending settlement
         let PendingSettlement { market_id: _, proposed_winner: _, proposed_at: _ } = move_from<PendingSettlement>(market_addr);

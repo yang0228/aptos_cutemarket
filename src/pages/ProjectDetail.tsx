@@ -1,9 +1,12 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useWallet } from '@aptos-labs/wallet-adapter-react';
 import { aptos, MODULE_ADDRESS, MODULES } from '../config/aptos';
 import { useProjectData } from '../hooks/useProjectData';
+import { useLiquidityInfo } from '../hooks/useLiquidityInfo';
 import { fetchTradeEvents, type TradeEvent } from '../services/indexer';
 import { OrderPanel } from '../components/OrderPanel';
+import { LiquidityPanel } from '../components/LiquidityPanel';
 import { PriceChart } from '../components/PriceChart';
 import { TradeHistory } from '../components/TradeHistory';
 import { calculateOdds, formatOdds, formatProbability } from '../utils/oddsCalculator';
@@ -21,7 +24,18 @@ export function ProjectDetail() {
   const [trades, setTrades] = useState<TradeEvent[]>([]);
   const [loadingMeta, setLoadingMeta] = useState(true);
 
+  const { account } = useWallet();
   const { data: projectData, loading, refetch } = useProjectData(marketId, marketAddress || undefined);
+  const { info: lpInfo, refetch: refetchLp } = useLiquidityInfo(
+    marketAddress || undefined,
+    account?.address?.toString()
+  );
+
+  const handleRefresh = () => {
+    refetch();
+    refetchLp();
+    fetchTradeEvents(marketId).then(setTrades);
+  };
 
   // Fetch market meta (address, name, options)
   useEffect(() => {
@@ -47,7 +61,7 @@ export function ProjectDetail() {
           },
         });
         const [, name, description, options] = stateResult as [
-          string, string, string, string[], string[], string, string, boolean, string
+          string, string, string, string[], string[], string, string, string, boolean, string
         ];
         setMarketName(name);
         setMarketDescription(description);
@@ -150,10 +164,17 @@ export function ProjectDetail() {
           {marketDescription && (
             <p className="text-white/90 text-lg">{marketDescription}</p>
           )}
-          <div className="flex justify-between items-center mt-4">
-            <p className="text-white/80">
-              总池: <span className="font-semibold text-2xl">
-                {loading ? '...' : `${projectData?.totalPool.toFixed(2) || 0} APT`}
+          <div className="flex flex-wrap gap-4 mt-4 text-white/80 text-sm">
+            <p>
+              下注池:{' '}
+              <span className="font-semibold text-lg text-white">
+                {loading ? '...' : `${projectData?.bettingPool.toFixed(2) ?? 0} APT`}
+              </span>
+            </p>
+            <p>
+              LP 准备金:{' '}
+              <span className="font-semibold text-lg text-white">
+                {loading ? '...' : `${projectData?.lpReserve.toFixed(2) ?? 0} APT`}
               </span>
             </p>
           </div>
@@ -232,10 +253,16 @@ export function ProjectDetail() {
             totalPool={projectData?.totalPool || 0}
             isSettled={projectData?.isSettled || false}
             isExpired={isExpired}
-            onTradeComplete={() => {
-              refetch();
-              fetchTradeEvents(marketId).then(setTrades);
-            }}
+            onTradeComplete={handleRefresh}
+          />
+          <LiquidityPanel
+            marketId={marketId}
+            lpReserveOctas={lpInfo.lpReserveOctas}
+            lpSupplyOctas={lpInfo.lpSupplyOctas}
+            userLpBalanceOctas={lpInfo.userLpBalanceOctas}
+            isSettled={projectData?.isSettled || false}
+            isExpired={isExpired}
+            onComplete={handleRefresh}
           />
         </div>
 

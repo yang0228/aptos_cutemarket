@@ -69,9 +69,9 @@ module cutemarket::test_integration {
         // User2 buys No shares (3 APT) — ~1.5% slippage on 205 APT pool
         amm::buy_shares(user2, 0, 1, 300000000);
 
-        // Verify total pool = 200 + 5 + 3 = 208 APT
-        let (_, _, _, _, _, total_pool, _, _, _) = market_core::get_market_state(market_addr);
-        assert!(total_pool == 20800000000, 1);
+        let (_, _, _, _, _, betting_pool, lp_reserve, _, _, _) = market_core::get_market_state(market_addr);
+        assert!(betting_pool == 800000000, 1);
+        assert!(lp_reserve == 20000000000, 2);
 
         // Fast forward past end time
         timestamp::fast_forward_seconds(86401);
@@ -86,15 +86,15 @@ module cutemarket::test_integration {
         oracle::execute_admin_settlement(0);
 
         // Verify settled
-        let (_, _, _, _, _, _, _, is_settled, _) = market_core::get_market_state(market_addr);
-        assert!(is_settled, 2);
+        let (_, _, _, _, _, _, _, _, is_settled, _) = market_core::get_market_state(market_addr);
+        assert!(is_settled, 3);
 
         // User1 claims winnings
         oracle::claim_winnings(user1, 0);
 
         // Verify user1 received payout (started 100 APT, bet 5 APT, won big)
         let user1_balance = coin::balance<AptosCoin>(@0x111);
-        assert!(user1_balance > 9500000000, 3);
+        assert!(user1_balance > 9500000000, 4);
     }
 
     #[test(aptos_framework = @0x1, admin = @cutemarket, user1 = @0x111, user2 = @0x222)]
@@ -134,8 +134,8 @@ module cutemarket::test_integration {
         assert!(balance_after > balance_before, 1);
 
         // Verify pool decreased
-        let (_, _, _, _, _, total_pool_after, _, _, _) = market_core::get_market_state(market_addr);
-        assert!(total_pool_after < 20000000000 + 80000000, 2);
+        let (_, _, _, _, _, betting_pool_after, _, _, _, _) = market_core::get_market_state(market_addr);
+        assert!(betting_pool_after < 80000000, 2);
     }
 
     #[test(aptos_framework = @0x1, admin = @cutemarket, user1 = @0x111, user2 = @0x222)]
@@ -181,7 +181,6 @@ module cutemarket::test_integration {
 
         let market_addr = market_core::get_market_address_for_test(0);
 
-        // Initial price should be 0 for each option (no bets, only total_pool has liquidity)
         let price_a = amm::get_option_price(market_addr, 0);
         let price_b = amm::get_option_price(market_addr, 1);
         assert!(price_a == 0, 0);
@@ -193,5 +192,50 @@ module cutemarket::test_integration {
         // Now A should have a price
         let price_a_after = amm::get_option_price(market_addr, 0);
         assert!(price_a_after > 0, 2);
+    }
+
+    #[test(aptos_framework = @0x1, admin = @cutemarket, user1 = @0x111, user2 = @0x222)]
+    fun test_add_liquidity_does_not_distort_odds(
+        aptos_framework: &signer,
+        admin: &signer,
+        user1: &signer,
+        user2: &signer,
+    ) {
+        setup(aptos_framework, admin, user1, user2);
+
+        market_core::create_market(
+            admin,
+            string::utf8(b"LP Test"),
+            string::utf8(b"Test"),
+            vector[string::utf8(b"Yes"), string::utf8(b"No")],
+            timestamp::now_seconds() + 86400,
+            5,
+            0,
+            vector::empty(),
+            0,
+            false,
+            1000000000,
+        );
+
+        let market_addr = market_core::get_market_address_for_test(0);
+
+        amm::buy_shares(user1, 0, 0, 40000000);
+        amm::buy_shares(user2, 0, 1, 30000000);
+
+        let price_yes_before = amm::get_option_price(market_addr, 0);
+        let price_no_before = amm::get_option_price(market_addr, 1);
+
+        amm::add_liquidity(admin, 0, 5000000000);
+
+        let price_yes_after = amm::get_option_price(market_addr, 0);
+        let price_no_after = amm::get_option_price(market_addr, 1);
+
+        assert!(price_yes_before == price_yes_after, 0);
+        assert!(price_no_before == price_no_after, 1);
+
+        let (_, _, _, _, _, betting_pool, lp_reserve, _, _, _) =
+            market_core::get_market_state(market_addr);
+        assert!(betting_pool == 70000000, 2);
+        assert!(lp_reserve == 6000000000, 3);
     }
 }

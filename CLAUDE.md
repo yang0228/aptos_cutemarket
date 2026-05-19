@@ -49,13 +49,13 @@ No test framework or linter is configured. `npm run build` runs `tsc` first, so 
 |--------|---------|
 | `governance` | MarketRegistry, admin management, fee config, pause |
 | `market_core` | MarketState, create_market, view functions |
-| `amm` | buy_shares, sell_shares, add_liquidity, get_option_price |
+| `amm` | buy_shares, sell_shares, add_liquidity, remove_liquidity, get_option_price |
 | `oracle` | settle_with_pyth, propose/execute_admin_settlement, claim_winnings |
 | `events` | Event structs and emit helpers |
 
-**Key entry functions**: `governance::initialize`, `market_core::initialize_market_list`, `market_core::create_market`, `amm::buy_shares`, `amm::sell_shares`, `oracle::propose_admin_settlement`, `oracle::claim_winnings`
+**Key entry functions**: `governance::initialize`, `market_core::initialize_market_list`, `market_core::create_market`, `amm::buy_shares`, `amm::sell_shares`, `amm::add_liquidity`, `amm::remove_liquidity`, `oracle::propose_admin_settlement`, `oracle::claim_winnings`
 
-**Key view functions**: `market_core::get_market_meta`, `market_core::get_market_state`, `amm::get_option_price`
+**Key view functions**: `market_core::get_market_meta`, `market_core::get_market_state`, `market_core::get_lp_info`, `amm::get_option_price`
 
 ## Test Account
 

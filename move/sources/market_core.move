@@ -60,7 +60,7 @@ module cutemarket::market_core {
         description: String,
         options: vector<String>,
         option_pools: vector<u64>,
-        total_pool: u64,
+        lp_reserve: u64,
         end_timestamp: u64,
         resolution_type: u8,
         pyth_price_id: vector<u8>,
@@ -145,14 +145,14 @@ module cutemarket::market_core {
         // Transfer initial liquidity to resource account
         coin::transfer<AptosCoin>(creator, market_address, initial_liquidity);
 
-        // Create market state
+        // Create market state (initial liquidity sits in lp_reserve, not option pools)
         let market_state = MarketState {
             market_id,
             name,
             description,
             options,
             option_pools,
-            total_pool: initial_liquidity,
+            lp_reserve: initial_liquidity,
             end_timestamp,
             resolution_type,
             pyth_price_id,
@@ -210,7 +210,7 @@ module cutemarket::market_core {
     // View: get market state
     #[view]
     public fun get_market_state(market_addr: address): (
-        u64, String, String, vector<String>, vector<u64>, u64, u64, bool, u64
+        u64, String, String, vector<String>, vector<u64>, u64, u64, u64, bool, u64
     ) acquires MarketState {
         assert!(exists<MarketState>(market_addr), E_MARKET_NOT_FOUND);
         let state = borrow_global<MarketState>(market_addr);
@@ -220,7 +220,8 @@ module cutemarket::market_core {
             state.description,
             state.options,
             state.option_pools,
-            state.total_pool,
+            get_betting_pool_total_internal(state),
+            state.lp_reserve,
             state.end_timestamp,
             state.is_settled,
             state.winning_option
@@ -291,7 +292,13 @@ module cutemarket::market_core {
             };
         };
 
-        (state.is_settled, state.winning_option, state.total_pool, winning_pool, user_total_cost)
+        (
+            state.is_settled,
+            state.winning_option,
+            get_betting_pool_total_internal(state),
+            winning_pool,
+            user_total_cost
+        )
     }
 
     // Internal: get market address by ID
@@ -320,20 +327,31 @@ module cutemarket::market_core {
         state.winning_option = winning_option;
     }
 
-    // Friend: add amount to an option pool (for amm module)
+    // Friend: add amount to an option pool (betting liquidity only)
     public(friend) fun add_to_pool(market_addr: address, option_index: u64, amount: u64) acquires MarketState {
         let state = borrow_global_mut<MarketState>(market_addr);
         let pool = vector::borrow_mut(&mut state.option_pools, option_index);
         *pool = *pool + amount;
-        state.total_pool = state.total_pool + amount;
     }
 
-    // Friend: remove amount from an option pool (for amm module)
+    // Friend: remove amount from an option pool (betting liquidity only)
     public(friend) fun remove_from_pool(market_addr: address, option_index: u64, amount: u64) acquires MarketState {
         let state = borrow_global_mut<MarketState>(market_addr);
         let pool = vector::borrow_mut(&mut state.option_pools, option_index);
         *pool = *pool - amount;
-        state.total_pool = state.total_pool - amount;
+    }
+
+    // Friend: add LP reserve (does not affect option pricing)
+    public(friend) fun add_lp_reserve(market_addr: address, amount: u64) acquires MarketState {
+        let state = borrow_global_mut<MarketState>(market_addr);
+        state.lp_reserve = state.lp_reserve + amount;
+    }
+
+    // Friend: remove LP reserve
+    public(friend) fun remove_lp_reserve(market_addr: address, amount: u64) acquires MarketState {
+        let state = borrow_global_mut<MarketState>(market_addr);
+        assert!(state.lp_reserve >= amount, E_INSUFFICIENT_LIQUIDITY);
+        state.lp_reserve = state.lp_reserve - amount;
     }
 
     // Friend: record a user bet (for amm module)
@@ -369,10 +387,27 @@ module cutemarket::market_core {
         *vector::borrow(&state.option_pools, option_index)
     }
 
-    // Friend: read total pool (for amm module)
-    public(friend) fun get_total_pool(market_addr: address): u64 acquires MarketState {
+    // Friend: sum of option pools (betting pool used for pricing)
+    public(friend) fun get_betting_pool_total(market_addr: address): u64 acquires MarketState {
         let state = borrow_global<MarketState>(market_addr);
-        state.total_pool
+        get_betting_pool_total_internal(state)
+    }
+
+    // Friend: LP reserve (not used for option pricing)
+    public(friend) fun get_lp_reserve(market_addr: address): u64 acquires MarketState {
+        let state = borrow_global<MarketState>(market_addr);
+        state.lp_reserve
+    }
+
+    fun get_betting_pool_total_internal(state: &MarketState): u64 {
+        let total = 0u64;
+        let i = 0;
+        let len = vector::length(&state.option_pools);
+        while (i < len) {
+            total = total + *vector::borrow(&state.option_pools, i);
+            i = i + 1;
+        };
+        total
     }
 
     // Friend: read lp_supply (for amm module)
@@ -386,6 +421,19 @@ module cutemarket::market_core {
         let state = borrow_global<MarketState>(market_addr);
         if (!table::contains(&state.lp_balances, provider)) return 0;
         *table::borrow(&state.lp_balances, provider)
+    }
+
+    // View: LP reserve, total LP supply, and provider balance (all in Octas / share units)
+    #[view]
+    public fun get_lp_info(market_addr: address, provider: address): (u64, u64, u64) acquires MarketState {
+        assert!(exists<MarketState>(market_addr), E_MARKET_NOT_FOUND);
+        let state = borrow_global<MarketState>(market_addr);
+        let balance = if (table::contains(&state.lp_balances, provider)) {
+            *table::borrow(&state.lp_balances, provider)
+        } else {
+            0
+        };
+        (state.lp_reserve, state.lp_supply, balance)
     }
 
     // Friend: check if market is settled (for oracle module)

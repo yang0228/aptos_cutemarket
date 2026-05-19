@@ -75,7 +75,7 @@ aptos move run \
 | pyth_price_id | vector<u8> | Pyth 价格 ID（管理员结算时为空） |
 | pyth_threshold | u64 | Pyth 阈值 |
 | pyth_above_wins | bool | 高于阈值是否获胜 |
-| initial_liquidity | u64 | 初始流动性（Octas，最少 1 APT） |
+| initial_liquidity | u64 | 初始流动性（Octas，最少 1 APT），进入 `lp_reserve` 并给创建者 LP 份额 |
 
 ### get_market_meta(market_id)
 
@@ -83,16 +83,27 @@ aptos move run \
 
 ### get_market_state(market_address)
 
-查询市场完整状态。返回 9 个值：
+查询市场完整状态。返回 10 个值：
 1. market_id
 2. name
 3. description
 4. options (vector<String>)
-5. option_pools (vector<u64>)
-6. total_pool (u64)
-7. end_timestamp (u64)
-8. is_settled (bool)
-9. winning_option (u64)
+5. option_pools (vector<u64>) — 各选项下注池（Octas）
+6. betting_pool_total (u64) — 下注池总和（Octas）
+7. lp_reserve (u64) — LP 准备金（Octas）
+8. end_timestamp (u64)
+9. is_settled (bool)
+10. winning_option (u64)
+
+### get_lp_info(market_address, provider)
+
+查询 LP 准备金、总 LP 份额、指定地址的 LP 余额（均为 Octas / 份额单位）。
+
+```bash
+aptos move view \
+  --function-id 0xf28e...::market_core::get_lp_info \
+  --args address:<market_addr> address:<provider_addr>
+```
 
 ```bash
 aptos move view \
@@ -114,11 +125,15 @@ aptos move view \
 
 ### add_liquidity(market_id, amount)
 
-向市场添加流动性。
+向市场 `lp_reserve` 添加流动性并铸造 LP 份额。**不会**改变 `option_pools`，因此不扭曲赔率。最少 1 APT。
+
+### remove_liquidity(market_id, lp_shares)
+
+按 LP 份额从 `lp_reserve` 赎回 APT。`lp_shares` 为要销毁的份额数量（非 APT 金额）。
 
 ### get_option_price(market_address, option_index)
 
-查询选项当前价格（BPS，10000 = 100%）。
+查询选项当前价格（BPS，10000 = 100%）。**仅基于下注池** `sum(option_pools)`，不含 `lp_reserve`。
 
 ---
 
@@ -158,9 +173,10 @@ aptos move run \
 | `MarketCreatedEvent` | market_id, market_address, creator, name, options, end_timestamp, category |
 | `SharesPurchasedEvent` | market_id, user, option_index, amount, shares_received, new_price_bps, timestamp |
 | `SharesSoldEvent` | market_id, user, option_index, shares, amount_received, new_price_bps, timestamp |
-| `MarketSettledEvent` | market_id, winning_option, total_pool, timestamp |
-| `LiquidityAddedEvent` | market_id, provider, amount, new_total_pool |
-| `WinningsClaimedEvent` | market_id, user, amount |
+| `MarketSettledEvent` | market_id, winning_option, betting_pool_total, timestamp |
+| `LiquidityAddedEvent` | market_id, provider, amount, lp_shares, timestamp |
+| `LiquidityRemovedEvent` | market_id, provider, amount, lp_shares, timestamp |
+| `WinningsClaimedEvent` | market_id, user, amount, timestamp |
 
 ## 常量
 

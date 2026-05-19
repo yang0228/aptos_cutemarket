@@ -85,8 +85,8 @@ export function useUserPositions(userAddress: string | undefined) {
                 functionArguments: [marketAddr],
               },
             });
-            const [, name, , options, , , , isSettled, winningOption] = stateResult as [
-              string, string, string, string[], string[], string, string, boolean, string
+            const [, name, , options, , , , , isSettled, winningOption] = stateResult as [
+              string, string, string, string[], string[], string, string, string, boolean, string
             ];
 
             const optionMap = new Map<number, { shares: number; cost: number }>();

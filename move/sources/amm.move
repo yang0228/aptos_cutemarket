@@ -9,7 +9,6 @@ module cutemarket::amm {
 
     friend cutemarket::oracle;
 
-    // Error codes
     const E_INVALID_OPTION: u64 = 300;
     const E_INSUFFICIENT_AMOUNT: u64 = 301;
     const E_MARKET_EXPIRED: u64 = 302;
@@ -18,12 +17,28 @@ module cutemarket::amm {
     const E_ZERO_SHARES: u64 = 305;
     const E_SLIPPAGE_TOO_HIGH: u64 = 306;
     const E_ZERO_POOL: u64 = 307;
+    const E_ZERO_LP_SHARES: u64 = 308;
+    const E_INSUFFICIENT_LP: u64 = 309;
 
-    // Slippage thresholds (basis points of total pool)
-    const SLIPPAGE_THRESHOLD_HIGH_BPS: u64 = 500;   // 5%
+    const SLIPPAGE_THRESHOLD_HIGH_BPS: u64 = 500;
     const BPS_BASE: u64 = 10000;
 
-    // Buy shares in a market option
+    // Slippage depth = betting pool + LP reserve (LP backs trade size, not option odds)
+    fun get_trade_depth(market_addr: address): u64 {
+        market_core::get_betting_pool_total(market_addr)
+            + market_core::get_lp_reserve(market_addr)
+    }
+
+    fun get_price_bps(market_addr: address, option_index: u64): u64 {
+        let betting_total = market_core::get_betting_pool_total(market_addr);
+        if (betting_total == 0) {
+            return BPS_BASE / market_core::get_options_length(market_addr)
+        };
+        let option_pool = market_core::get_option_pool(market_addr, option_index);
+        let price_bps = (option_pool * BPS_BASE) / betting_total;
+        if (price_bps == 0) 1 else price_bps
+    }
+
     public entry fun buy_shares(
         user: &signer,
         market_id: u64,
@@ -34,42 +49,25 @@ module cutemarket::amm {
         let user_addr = signer::address_of(user);
         let now = timestamp::now_seconds();
 
-        // Validations using granular reads
         assert!(!market_core::is_settled(market_addr), E_ALREADY_SETTLED);
         assert!(now < market_core::get_end_timestamp(market_addr), E_MARKET_EXPIRED);
         assert!(option_index < market_core::get_options_length(market_addr), E_INVALID_OPTION);
-        assert!(amount >= 1000000, E_INSUFFICIENT_AMOUNT); // 0.01 APT min
+        assert!(amount >= 1000000, E_INSUFFICIENT_AMOUNT);
 
-        // Calculate price and shares
-        let option_pool = market_core::get_option_pool(market_addr, option_index);
-        let total_pool = market_core::get_total_pool(market_addr);
-        assert!(total_pool > 0, E_ZERO_POOL);
+        let depth = get_trade_depth(market_addr);
+        assert!(depth > 0, E_ZERO_POOL);
 
-        // Price = option_pool / total_pool (in BPS)
-        let price_bps = (option_pool * BPS_BASE) / total_pool;
-        if (price_bps == 0) price_bps = 1; // minimum price
-
-        // Check slippage
-        let amount_bps = (amount * BPS_BASE) / total_pool;
+        let price_bps = get_price_bps(market_addr, option_index);
+        let amount_bps = (amount * BPS_BASE) / depth;
         assert!(amount_bps <= SLIPPAGE_THRESHOLD_HIGH_BPS, E_SLIPPAGE_TOO_HIGH);
 
-        // Calculate shares = amount / price
         let shares = (amount * BPS_BASE) / price_bps;
 
-        // Transfer APT to market account
         coin::transfer<AptosCoin>(user, market_addr, amount);
-
-        // Update pools using granular mutation
         market_core::add_to_pool(market_addr, option_index, amount);
 
-        // Record bet
         let bet = market_core::create_user_bet(option_index, shares, amount);
         market_core::add_user_bet(market_addr, user_addr, bet);
-
-        // Calculate new price
-        let new_option_pool = market_core::get_option_pool(market_addr, option_index);
-        let new_total_pool = market_core::get_total_pool(market_addr);
-        let new_price_bps = (new_option_pool * BPS_BASE) / new_total_pool;
 
         events::emit_shares_purchased(
             market_id,
@@ -77,12 +75,11 @@ module cutemarket::amm {
             option_index,
             amount,
             shares,
-            new_price_bps,
+            get_price_bps(market_addr, option_index),
             now,
         );
     }
 
-    // Sell shares
     public entry fun sell_shares(
         user: &signer,
         market_id: u64,
@@ -93,41 +90,33 @@ module cutemarket::amm {
         let user_addr = signer::address_of(user);
         let now = timestamp::now_seconds();
 
-        // Read user shares before mutations (avoid borrow checker conflict)
         let user_shares = market_core::get_user_shares(market_addr, user_addr, option_index);
         assert!(user_shares >= shares, E_INSUFFICIENT_SHARES);
         assert!(shares > 0, E_ZERO_SHARES);
 
-        // Validations
         assert!(!market_core::is_settled(market_addr), E_ALREADY_SETTLED);
         assert!(now < market_core::get_end_timestamp(market_addr), E_MARKET_EXPIRED);
         assert!(option_index < market_core::get_options_length(market_addr), E_INVALID_OPTION);
 
-        // Calculate payout
-        let option_pool = market_core::get_option_pool(market_addr, option_index);
-        let total_pool = market_core::get_total_pool(market_addr);
-        assert!(total_pool > 0, E_ZERO_POOL);
+        assert!(market_core::get_betting_pool_total(market_addr) > 0, E_ZERO_POOL);
 
-        let price_bps = (option_pool * BPS_BASE) / total_pool;
+        let price_bps = get_price_bps(market_addr, option_index);
         let amount = (shares * price_bps) / BPS_BASE;
 
-        // Deduct platform fee
         let fee_bps = governance::get_fee_bps();
         let fee = (amount * fee_bps) / BPS_BASE;
         let payout = amount - fee;
 
-        // Update pools using granular mutation
         market_core::remove_from_pool(market_addr, option_index, amount);
+        if (fee > 0) {
+            market_core::add_lp_reserve(market_addr, fee);
+        };
 
-        // Transfer APT to user
         let resource_signer = market_core::get_resource_signer(market_addr);
         coin::transfer<AptosCoin>(&resource_signer, user_addr, payout);
 
-        // Calculate new price
-        let new_option_pool = market_core::get_option_pool(market_addr, option_index);
-        let new_total_pool = market_core::get_total_pool(market_addr);
-        let new_price_bps = if (new_total_pool > 0) {
-            (new_option_pool * BPS_BASE) / new_total_pool
+        let new_price_bps = if (market_core::get_betting_pool_total(market_addr) > 0) {
+            get_price_bps(market_addr, option_index)
         } else {
             0
         };
@@ -143,7 +132,6 @@ module cutemarket::amm {
         );
     }
 
-    // Add liquidity
     public entry fun add_liquidity(
         provider: &signer,
         market_id: u64,
@@ -155,33 +143,57 @@ module cutemarket::amm {
 
         assert!(!market_core::is_settled(market_addr), E_ALREADY_SETTLED);
         assert!(now < market_core::get_end_timestamp(market_addr), E_MARKET_EXPIRED);
-        assert!(amount >= 100000000, E_INSUFFICIENT_AMOUNT); // 1 APT min
+        assert!(amount >= 100000000, E_INSUFFICIENT_AMOUNT);
 
-        // Calculate LP shares
         let lp_supply = market_core::get_lp_supply(market_addr);
-        let total_pool = market_core::get_total_pool(market_addr);
+        let lp_reserve = market_core::get_lp_reserve(market_addr);
         let lp_shares = if (lp_supply == 0) {
             amount
         } else {
-            (amount * lp_supply) / total_pool
+            (amount * lp_supply) / lp_reserve
         };
 
-        // Transfer APT to market
         coin::transfer<AptosCoin>(provider, market_addr, amount);
-
-        // Update LP balances and pool
         market_core::update_lp_balance(market_addr, provider_addr, lp_shares, true);
-        market_core::add_to_pool(market_addr, 0, amount); // Add to first option pool for simplicity
+        market_core::add_lp_reserve(market_addr, amount);
 
         events::emit_liquidity_added(market_id, provider_addr, amount, lp_shares, now);
     }
 
-    // View: calculate price for an option (in BPS)
+    public entry fun remove_liquidity(
+        provider: &signer,
+        market_id: u64,
+        lp_shares: u64,
+    ) {
+        let market_addr = market_core::get_market_address(market_id);
+        let provider_addr = signer::address_of(provider);
+        let now = timestamp::now_seconds();
+
+        assert!(!market_core::is_settled(market_addr), E_ALREADY_SETTLED);
+        assert!(now < market_core::get_end_timestamp(market_addr), E_MARKET_EXPIRED);
+        assert!(lp_shares > 0, E_ZERO_LP_SHARES);
+
+        let lp_balance = market_core::get_lp_balance(market_addr, provider_addr);
+        assert!(lp_shares <= lp_balance, E_INSUFFICIENT_LP);
+
+        let lp_supply = market_core::get_lp_supply(market_addr);
+        let lp_reserve = market_core::get_lp_reserve(market_addr);
+        let amount = (lp_shares * lp_reserve) / lp_supply;
+
+        market_core::update_lp_balance(market_addr, provider_addr, lp_shares, false);
+        market_core::remove_lp_reserve(market_addr, amount);
+
+        let resource_signer = market_core::get_resource_signer(market_addr);
+        coin::transfer<AptosCoin>(&resource_signer, provider_addr, amount);
+
+        events::emit_liquidity_removed(market_id, provider_addr, amount, lp_shares, now);
+    }
+
     #[view]
     public fun get_option_price(market_addr: address, option_index: u64): u64 {
-        let total_pool = market_core::get_total_pool(market_addr);
-        if (total_pool == 0) return 0;
+        let betting_total = market_core::get_betting_pool_total(market_addr);
+        if (betting_total == 0) return 0;
         let option_pool = market_core::get_option_pool(market_addr, option_index);
-        (option_pool * BPS_BASE) / total_pool
+        (option_pool * BPS_BASE) / betting_total
     }
 }

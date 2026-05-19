@@ -31,13 +31,13 @@ export function useMarkets() {
             },
           });
 
-          const [, , , , optionPools, totalPool, , isSettled] = result as [
-            string, string, string, string[], string[], string, string, boolean, string
+          const [, , , , optionPools, bettingPool, lpReserve, , isSettled] = result as [
+            string, string, string, string[], string[], string, string, string, boolean, string
           ];
 
           marketsWithState.push({
             ...meta,
-            total_pool: octasToApt(Number(totalPool)),
+            total_pool: octasToApt(Number(bettingPool) + Number(lpReserve)),
             is_settled: isSettled,
             option_pools: (optionPools as string[]).map((p) => octasToApt(Number(p))),
           });

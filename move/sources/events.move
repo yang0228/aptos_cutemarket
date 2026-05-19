@@ -52,6 +52,15 @@ module cutemarket::events {
     }
 
     #[event]
+    struct LiquidityRemovedEvent has drop, store {
+        market_id: u64,
+        provider: address,
+        amount: u64,
+        lp_shares: u64,
+        timestamp: u64,
+    }
+
+    #[event]
     struct WinningsClaimedEvent has drop, store {
         market_id: u64,
         user: address,
@@ -141,6 +150,22 @@ module cutemarket::events {
         timestamp: u64,
     ) {
         0x1::event::emit(LiquidityAddedEvent {
+            market_id,
+            provider,
+            amount,
+            lp_shares,
+            timestamp,
+        });
+    }
+
+    public fun emit_liquidity_removed(
+        market_id: u64,
+        provider: address,
+        amount: u64,
+        lp_shares: u64,
+        timestamp: u64,
+    ) {
+        0x1::event::emit(LiquidityRemovedEvent {
             market_id,
             provider,
             amount,

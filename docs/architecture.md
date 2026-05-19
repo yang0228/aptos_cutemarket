@@ -44,6 +44,7 @@ main.tsx → App.tsx → ErrorBoundary → WalletProvider → Router
 |------|------|--------|
 | `useMarkets()` | 所有市场列表 + 状态 | `getAccountTransactions` 扫描事件 + `get_market_state` view |
 | `useProjectData(marketId, marketAddress)` | 单个市场详情 | `get_market_state` view 函数 |
+| `useLiquidityInfo(marketAddress, userAddress)` | LP 准备金与用户 LP 份额 | `get_lp_info` view 函数 |
 | `useUserPositions(address)` | 用户所有市场的持仓和 P&L | 多次调用 view + `get_option_price` |
 
 事件数据通过 `getAccountTransactions` 获取（Aptos indexer 的 `events` 表已废弃）。
@@ -63,7 +64,7 @@ main.tsx → App.tsx → ErrorBoundary → WalletProvider → Router
 
 用户交易
   → OrderPanel 验证输入
-  → signAndSubmitTransaction() 调用 amm::buy_shares / sell_shares
+  → signAndSubmitTransaction() 调用 amm::buy_shares / sell_shares / add_liquidity / remove_liquidity
   → 等待交易确认
   → 触发 refetch + fetchTradeEvents
   → UI 更新
@@ -94,7 +95,7 @@ UI 层只处理 APT，合约层只处理 Octas。
 move/sources/
 ├── governance.move     — MarketRegistry、admin 管理、费率、暂停
 ├── market_core.move    — MarketState、create_market、view 函数
-├── amm.move            — buy_shares、sell_shares、add_liquidity、定价
+├── amm.move            — buy_shares、sell_shares、add/remove_liquidity、定价
 ├── oracle.move         — 结算（admin/Pyth）、claim_winnings
 └── events.move         — 6 个事件结构体和发射辅助函数
 ```
@@ -103,7 +104,7 @@ move/sources/
 
 **MarketState**（每个市场一个 resource，存在资源账户上）：
 - market_id, name, description, options
-- option_pools (每选项池), total_pool
+- option_pools（各选项下注池）, lp_reserve（LP 准备金，不参与赔率）
 - end_timestamp, resolution_type, is_settled, winning_option
 - lp_supply, lp_balances, user_bets
 
@@ -115,19 +116,21 @@ move/sources/
 
 ### AMM 定价模型
 
-使用 Constant Sum AMM：
-- price = option_pool / total_pool（以 BPS 表示，10000 = 100%）
-- 买入时价格上升，卖出时价格下降
-- 每笔交易收取 2% 手续费
+使用 Constant Sum AMM（赔率仅看下注池）：
+- price = option_pool / sum(option_pools)（BPS，10000 = 100%）
+- `lp_reserve` 与 `add_liquidity` 不改变各选项隐含价格
+- 滑点深度 = 下注池 + lp_reserve
+- `sell_shares` 手续费计入 `lp_reserve`，由 LP 分享
 
 ### 事件系统
 
-6 种链上事件：
+7 种链上事件：
 - `MarketCreatedEvent` — 市场创建
 - `SharesPurchasedEvent` — 买入份额
 - `SharesSoldEvent` — 卖出份额
 - `MarketSettledEvent` — 市场结算
 - `LiquidityAddedEvent` — 添加流动性
+- `LiquidityRemovedEvent` — 移除流动性
 - `WinningsClaimedEvent` — 领取奖金
 
 ## 设计决策
