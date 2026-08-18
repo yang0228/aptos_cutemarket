@@ -136,6 +136,149 @@ module cutemarket::test_integration {
         // Verify pool decreased
         let (_, _, _, _, _, betting_pool_after, _, _, _, _) = market_core::get_market_state(market_addr);
         assert!(betting_pool_after < 80000000, 2);
+
+        assert!(market_core::get_user_shares(market_addr, @0x111, 0) == shares - shares / 1000, 3);
+        let (_, _, _, _, remaining_cost) = market_core::get_claim_info(market_addr, @0x111);
+        assert!(remaining_cost == 79920000, 4);
+    }
+
+    // Two lots of option 0 at different prices, plus an unrelated option 1 position.
+    // Another holder supplies enough option-pool funds to exercise full sales.
+    fun setup_sell_positions(
+        aptos_framework: &signer, admin: &signer, user1: &signer, user2: &signer,
+    ): address {
+        setup(aptos_framework, admin, user1, user2);
+        market_core::create_market(
+            admin,
+            string::utf8(b"Sell accounting"),
+            string::utf8(b"Track remaining shares and cost"),
+            vector[string::utf8(b"A"), string::utf8(b"B")],
+            timestamp::now_seconds() + 86400,
+            5, 0, vector::empty(), 0, false, 20000000000,
+        );
+        amm::buy_shares(user1, 0, 0, 80000000); // 1.6 shares, cost 0.8 APT
+        amm::buy_shares(user2, 0, 0, 200000000);
+        amm::buy_shares(user1, 0, 0, 100000000); // 1 share, cost 1 APT
+        amm::buy_shares(user1, 0, 1, 50000000);
+        market_core::get_market_address_for_test(0)
+    }
+
+    #[test(aptos_framework = @0x1, admin = @cutemarket, user1 = @0x111, user2 = @0x222)]
+    fun test_sell_shares_consumes_lots_in_order(
+        aptos_framework: &signer, admin: &signer, user1: &signer, user2: &signer,
+    ) {
+        let addr = setup_sell_positions(aptos_framework, admin, user1, user2);
+        let other_option_shares = market_core::get_user_shares(addr, @0x111, 1);
+        let other_user_shares = market_core::get_user_shares(addr, @0x222, 0);
+
+        // Partially consume the first lot: 0.6 shares / 0.3 APT remain in it.
+        amm::sell_shares(user1, 0, 0, 100000000);
+        assert!(market_core::get_user_shares(addr, @0x111, 0) == 160000000, 0);
+        let (_, _, _, _, cost) = market_core::get_claim_info(addr, @0x111);
+        assert!(cost == 130000000, 1);
+        assert!(vector::length(&market_core::get_user_bets(addr, @0x111)) == 3, 2);
+
+        // Consume the rest of the first lot and part of the second lot.
+        amm::sell_shares(user1, 0, 0, 100000000);
+        assert!(market_core::get_user_shares(addr, @0x111, 0) == 60000000, 3);
+        let (_, _, _, _, cost) = market_core::get_claim_info(addr, @0x111);
+        assert!(cost == 60000000, 4);
+        assert!(vector::length(&market_core::get_user_bets(addr, @0x111)) == 2, 5);
+        assert!(market_core::get_user_shares(addr, @0x111, 1) == other_option_shares, 6);
+        assert!(market_core::get_user_shares(addr, @0x222, 0) == other_user_shares, 7);
+
+        timestamp::fast_forward_seconds(86401);
+        oracle::propose_admin_settlement(admin, 0, 0);
+        timestamp::fast_forward_seconds(86401);
+        oracle::execute_admin_settlement(0);
+        let (_, _, pool, winning_pool, cost) = market_core::get_claim_info(addr, @0x111);
+        assert!(cost == 60000000, 8);
+        let balance = coin::balance<AptosCoin>(@0x111);
+        oracle::claim_winnings(user1, 0);
+        assert!(coin::balance<AptosCoin>(@0x111) - balance == cost * (pool - pool * 200 / 10000) / winning_pool, 9);
+    }
+
+    #[test(aptos_framework = @0x1, admin = @cutemarket, user1 = @0x111, user2 = @0x222)]
+    fun test_sell_shares_rounding_and_full_exit(
+        aptos_framework: &signer, admin: &signer, user1: &signer, user2: &signer,
+    ) {
+        let addr = setup_sell_positions(aptos_framework, admin, user1, user2);
+        // Round remaining cost down when a partial lot cannot divide exactly.
+        amm::sell_shares(user1, 0, 0, 3);
+        let (_, _, _, _, cost) = market_core::get_claim_info(addr, @0x111);
+        assert!(cost == 179999998, 0);
+        assert!(market_core::get_user_shares(addr, @0x111, 0) == 259999997, 1);
+
+        amm::sell_shares(user1, 0, 0, 259999997);
+        assert!(market_core::get_user_shares(addr, @0x111, 0) == 0, 2);
+        let (_, _, _, _, cost) = market_core::get_claim_info(addr, @0x111);
+        assert!(cost == 0, 3);
+        assert!(vector::length(&market_core::get_user_bets(addr, @0x111)) == 1, 4);
+
+        timestamp::fast_forward_seconds(86401);
+        oracle::propose_admin_settlement(admin, 0, 0);
+        timestamp::fast_forward_seconds(86401);
+        oracle::execute_admin_settlement(0);
+        let balance = coin::balance<AptosCoin>(@0x111);
+        oracle::claim_winnings(user1, 0);
+        assert!(coin::balance<AptosCoin>(@0x111) == balance, 5);
+    }
+
+    #[test(aptos_framework = @0x1, admin = @cutemarket, user1 = @0x111, user2 = @0x222)]
+    fun test_sell_shares_preserves_other_option_cost(
+        aptos_framework: &signer, admin: &signer, user1: &signer, user2: &signer,
+    ) {
+        let addr = setup_sell_positions(aptos_framework, admin, user1, user2);
+        amm::sell_shares(user1, 0, 0, 260000000);
+        assert!(market_core::get_user_shares(addr, @0x111, 0) == 0, 0);
+
+        timestamp::fast_forward_seconds(86401);
+        oracle::propose_admin_settlement(admin, 0, 1);
+        timestamp::fast_forward_seconds(86401);
+        oracle::execute_admin_settlement(0);
+        let (_, _, _, _, cost) = market_core::get_claim_info(addr, @0x111);
+        assert!(cost == 50000000, 1);
+    }
+
+    #[test(aptos_framework = @0x1, admin = @cutemarket, user1 = @0x111, user2 = @0x222)]
+    fun test_sell_shares_skips_other_option_lots(
+        aptos_framework: &signer, admin: &signer, user1: &signer, user2: &signer,
+    ) {
+        let addr = setup_sell_positions(aptos_framework, admin, user1, user2);
+        let before = market_core::get_user_shares(addr, @0x111, 1);
+        // The option 1 lot follows both option 0 lots in the user's vector.
+        amm::sell_shares(user1, 0, 1, 1000000);
+        assert!(market_core::get_user_shares(addr, @0x111, 1) == before - 1000000, 0);
+        assert!(market_core::get_user_shares(addr, @0x111, 0) == 260000000, 1);
+        let (_, _, _, _, cost) = market_core::get_claim_info(addr, @0x111);
+        assert!(cost == 180000000, 2);
+
+        timestamp::fast_forward_seconds(86401);
+        oracle::propose_admin_settlement(admin, 0, 1);
+        timestamp::fast_forward_seconds(86401);
+        oracle::execute_admin_settlement(0);
+        let (_, _, _, _, cost) = market_core::get_claim_info(addr, @0x111);
+        assert!(cost == 49999900, 3);
+    }
+
+    #[test(aptos_framework = @0x1, admin = @cutemarket, user1 = @0x111, user2 = @0x222)]
+    #[expected_failure(abort_code = amm::E_INSUFFICIENT_SHARES)]
+    fun test_sell_shares_rejects_more_than_remaining(
+        aptos_framework: &signer, admin: &signer, user1: &signer, user2: &signer,
+    ) {
+        setup_sell_positions(aptos_framework, admin, user1, user2);
+        amm::sell_shares(user1, 0, 0, 210000000);
+        amm::sell_shares(user1, 0, 0, 100000000);
+    }
+
+    #[test(aptos_framework = @0x1, admin = @cutemarket, user1 = @0x111, user2 = @0x222)]
+    #[expected_failure(abort_code = amm::E_INSUFFICIENT_SHARES)]
+    fun test_sell_shares_rejects_reselling_closed_position(
+        aptos_framework: &signer, admin: &signer, user1: &signer, user2: &signer,
+    ) {
+        setup_sell_positions(aptos_framework, admin, user1, user2);
+        amm::sell_shares(user1, 0, 0, 260000000);
+        amm::sell_shares(user1, 0, 0, 1000000);
     }
 
     #[test(aptos_framework = @0x1, admin = @cutemarket, user1 = @0x111, user2 = @0x222)]

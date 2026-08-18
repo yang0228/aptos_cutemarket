@@ -27,6 +27,7 @@ module cutemarket::market_core {
     const E_ALREADY_SETTLED: u64 = 210;
     const E_NOT_SETTLED: u64 = 211;
     const E_PAUSED: u64 = 212;
+    const E_INSUFFICIENT_SHARES: u64 = 213;
 
     // Constants
     const MIN_BET_AMOUNT: u64 = 1000000; // 0.01 APT
@@ -362,6 +363,37 @@ module cutemarket::market_core {
         };
         let bets = table::borrow_mut(&mut state.user_bets, user);
         vector::push_back(bets, bet);
+    }
+
+    // Consume the oldest lots of this option first, preserving other options.
+    // Cost tracks only the remaining shares so sold positions cannot claim winnings.
+    public(friend) fun consume_user_shares(
+        market_addr: address, user: address, option_index: u64, shares: u64,
+    ) acquires MarketState {
+        let state = borrow_global_mut<MarketState>(market_addr);
+        assert!(table::contains(&state.user_bets, user), E_INSUFFICIENT_SHARES);
+        let bets = table::borrow_mut(&mut state.user_bets, user);
+        let remaining = shares;
+        let i = 0;
+        while (remaining > 0 && i < vector::length(bets)) {
+            let bet = *vector::borrow(bets, i);
+            if (bet.option_index != option_index) {
+                i = i + 1;
+            } else if (bet.shares <= remaining) {
+                remaining = remaining - bet.shares;
+                vector::remove(bets, i);
+            } else {
+                let remaining_shares = bet.shares - remaining;
+                // Use u128 for the product; round remaining cost down to Octas.
+                let remaining_cost = (((bet.cost as u128) * (remaining_shares as u128))
+                    / (bet.shares as u128)) as u64;
+                let stored_bet = vector::borrow_mut(bets, i);
+                stored_bet.shares = remaining_shares;
+                stored_bet.cost = remaining_cost;
+                remaining = 0;
+            };
+        };
+        assert!(remaining == 0, E_INSUFFICIENT_SHARES);
     }
 
     // Friend: update LP balance (for amm module)

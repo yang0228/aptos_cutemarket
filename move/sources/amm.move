@@ -107,6 +107,7 @@ module cutemarket::amm {
         let fee = (amount * fee_bps) / BPS_BASE;
         let payout = amount - fee;
 
+        market_core::consume_user_shares(market_addr, user_addr, option_index, shares);
         market_core::remove_from_pool(market_addr, option_index, amount);
         if (fee > 0) {
             market_core::add_lp_reserve(market_addr, fee);
